@@ -196,6 +196,16 @@ def message_handler(sender, message, user_state):
     
     if step == "get_whatsapp_verification":
         filename = user_state.get("filename")
+        filename = None
+
+        if "image" in user_state:
+            image_filename = user_state["image"].get("filename")
+        # Or if the message itself includes a file or URL
+        elif isinstance(message, dict) and "filename" in message:
+            image_filename = message["filename"]
+        elif isinstance(message, dict) and "url" in message:
+            image_filename = message["url"]
+            
         if filename:
             if is_image_extension(filename):
                 # Proceed to the next step since it's an image file
@@ -211,6 +221,7 @@ def message_handler(sender, message, user_state):
             user_state["step"] = "get_whatsapp_verification"
             save_user_state(sender, user_state)
             return
+            
 
 
 
