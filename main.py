@@ -103,14 +103,14 @@ def check_redis_connection():
 
 def message_handler(message, user_state):
     # Detect if returning user wants to restart
-if message.strip().lower() == "hi" and user_state.get("step") == "end":
-    return (
-        "Welcome back! What would you like to do today?\n"
-        "1. Post a new vacancy\n"
-        "2. Update existing listing\n"
-        "3. Contact placement team",
-        {"step": "returning_user_menu"}
-    )
+    if message.strip().lower() == "hi" and user_state.get("step") == "end":
+        return (
+            "Welcome back! What would you like to do today?\n"
+            "1. Post a new vacancy\n"
+            "2. Update existing listing\n"
+            "3. Contact placement team",
+            {"step": "returning_user_menu"}
+        )
 
     msg = message.strip().lower()
     step = user_state.get("step", "start")
