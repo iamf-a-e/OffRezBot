@@ -1,15 +1,206 @@
-def generate_confirmation_message(student):
+import os
+import json
+import time
+import requests
+import logging
+import random
+import string
+from datetime import datetime
+from flask import Flask, request, jsonify, render_template
+
+
+logging.basicConfig(level=logging.INFO)
+
+# Environment variables
+wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
+phone_id = os.environ.get("PHONE_ID") 
+gen_api = os.environ.get("GEN_API")    # Gemini API Key
+owner_phone = os.environ.get("OWNER_PHONE")
+
+# ==================== Upstash Redis Config ====================
+REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
+REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+
+if not REDIS_URL or not REDIS_TOKEN:
+    raise EnvironmentError("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set.")
+
+class UpstashRedisClient:
+    def __init__(self, base_url, token):
+        self.base_url = base_url.rstrip("/")
+        self.headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+    def set(self, key, value, ex=None):
+        url = f"{self.base_url}/set/{key}"
+        payload = {"value": value}
+        if ex is not None:
+            payload["ex"] = ex  # Expiry in seconds
+        response = requests.post(url, headers=self.headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def get(self, key):
+        url = f"{self.base_url}/get/{key}"
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+        result = response.json()
+        return result.get("result")
+
+# Initialize Redis client
+redis_client = UpstashRedisClient(REDIS_URL, REDIS_TOKEN)
+
+def save_user_state(user_id, state, expiry_seconds=60):
+    redis_client.set(f"user_state:{user_id}", json.dumps(state), ex=expiry_seconds)
+
+def get_user_state(user_id):
+    result = redis_client.get(f"user_state:{user_id}")
+    if result:
+        return json.loads(result)
+    return None
+
+# ==================== Messaging Logic ====================
+
+def message_handler(message, user_state):
     """
-    Generates a confirmation message for the landlord about a student.
+    Handles incoming messages and determines the appropriate response and next state,
+    with onboarding for first-time users.
 
     Args:
-        student (dict): Student and landlord details.
+        message (str): The incoming message from the user.
+        user_state (dict): The current user's session state.
 
     Returns:
-        str: Message to send to the landlord.
+        response (str): The reply message to send.
+        new_state (dict): The updated user state.
     """
+
+    msg = message.strip().lower()
+    landlord_name = user_state.get("landlord_name", "Landlord")
+    student_name = user_state.get("student_name", "the student")
+
+    # --- 1. First time user onboarding ---
+    if not user_state.get("user_type"):
+        # If not set, ask for role
+        if msg in ["landlord", "student"]:
+            user_state["user_type"] = msg
+            if msg == "student":
+                response = (
+                    "Hi! If you are a student, please use the OffRez Student App to find and book accommodation. "
+                    "This bot is for landlords only."
+                )
+                user_state["onboarded"] = True
+                return response, user_state
+            elif msg == "landlord":
+                user_state["initiated_by"] = "landlord"
+                user_state["onboarded"] = True
+                response = (
+                    "Welcome, landlord! 👋\n"
+                    "Let's get you started with student housing registration.\n"
+                    "Please provide your full name and the location of your property to begin the registration process."
+                )
+                return response, user_state
+        else:
+            response = (
+                "Welcome! Are you a 'landlord' or a 'student'?\n"
+                "Please reply with either 'landlord' or 'student'."
+            )
+            return response, user_state
+
+    # --- 2. Normal chat logic after onboarding ---
+    initiated_by = user_state.get("initiated_by", "placement_team")
+    semester = user_state.get("semester", "current")
+    mass_messaging = user_state.get("mass_messaging", False)
+
+    # LANDLORD INITIATES ("Hie" initiated_by_landlord.png)
+    if initiated_by == "landlord":
+        response = (f"Hello {landlord_name}, thank you for reaching out! 👋\n"
+                    "How can we help you today regarding your student accommodation?\n"
+                    "If you have vacancies or updates, please let us know below. 🏠")
+        user_state["last_prompt"] = "awaiting_landlord_info"
+        return response, user_state
+
+    # MASS MESSAGING - current semester
+    if mass_messaging and semester == "current":
+        confirmation = (
+            "Do you have any vacancies for the **current semester**?\n\n"
+            "Please reply with:\n"
+            "✅ Yes - if you have available rooms\n"
+            "❌ No - if you can't take students\n"
+            "🏠 Full - if your house(s) are currently full"
+        )
+        if msg in ["yes", "✅"]:
+            response = "Thank you for confirming you have available rooms. We'll be in touch with student matches soon. 👍"
+        elif msg in ["no", "❌"]:
+            response = "Noted. We won't assign students to your house(s) for this semester. Let us know if anything changes."
+        elif msg in ["full", "🏠"]:
+            response = "Thanks for letting us know your house(s) are full. We'll update our records."
+        else:
+            response = confirmation
+        user_state["last_prompt"] = "current_sem_mass"
+        return response, user_state
+
+    # MASS MESSAGING - next semester
+    if mass_messaging and semester == "next":
+        confirmation = (
+            "Do you expect to have any available rooms for students **next semester**?\n\n"
+            "Please reply with:\n"
+            "✅ Yes - if you'll have rooms\n"
+            "❌ No - if you won't have rooms\n"
+            "🏠 Full - if your house(s) will be full"
+        )
+        if msg in ["yes", "✅"]:
+            response = "Thank you for confirming you'll have available rooms next semester. We'll be in touch with student matches. 👍"
+        elif msg in ["no", "❌"]:
+            response = "Noted. We won't assign students to your house(s) for next semester. Let us know if anything changes."
+        elif msg in ["full", "🏠"]:
+            response = "Thanks for letting us know your house(s) will be full next semester. We'll update our records."
+        else:
+            response = confirmation
+        user_state["last_prompt"] = "next_sem_mass"
+        return response, user_state
+
+    # DIRECT CONFIRMATION (student-initiated or placement team)
+    if not mass_messaging:
+        confirmation = (
+            f"Is there a room available at your place for {student_name}?\n"
+            "Please reply with:\n"
+            "✅ Yes - if there's a room\n"
+            "❌ No - if you can't take this student\n"
+            "🏠 Full - if the house is currently full"
+        )
+        if msg in ["yes", "✅"]:
+            response = f"Great! I'll let {student_name} know that a room is available and proceed with confirmation. 🎉"
+        elif msg in ["no", "❌"]:
+            response = (
+                f"Noted. We’ll inform {student_name} that the place is not available.\n"
+                "Let us know if anything changes. 🙏"
+            )
+        elif msg in ["full", "🏠"]:
+            response = (
+                "Okay, we’ll mark the house as full for now and not assign more students.\n"
+                "Thanks for the update! 🏠"
+            )
+        else:
+            response = confirmation
+        user_state["last_prompt"] = "direct_confirmation"
+        return response, user_state
+
+    # fallback
+    response = "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
+    return response, user_state
+
+
+def generate_confirmation_message(
+    student,
+    *,
+    semester="current",
+    mass_messaging=False,
+    initiated_by="placement_team"
+):
     name = student.get("name", "the student")
-    gender = student.get("gender", "").lower()
+    gender = student.get("gender", "male").lower()
     pronoun = "he" if gender == "male" else "she"
     part = student.get("part", "")
     room_type = student.get("room_type", "")
@@ -18,85 +209,254 @@ def generate_confirmation_message(student):
     house_name = student.get("house_name", "")
     move_in_date = student.get("move_in_date", "")
     multiple_houses = student.get("multiple_houses", False)
-    landlord_name = student.get("landlord_name", "Landlord")
+    landlord_name = student.get("landlord_name", "")
+
+    if initiated_by == "landlord":
+        intro = f"Hello {landlord_name}, thank you for reaching out! 👋\n"
+        detail = (
+            "How can we help you today regarding your student accommodation?\n"
+            "If you have vacancies or updates, please let us know below. 🏠"
+        )
+        return intro + detail
+
+    if mass_messaging:
+        if semester == "current":
+            msg = (
+                f"Hi {landlord_name} 👋, this is Talent from the student accommodation placement team.\n\n"
+                f"We are confirming available rooms for the **current semester** in your house(s) in {city}.\n"
+                "Do you have any vacancies?\n\n"
+                "Please reply with:\n"
+                "✅ Yes - if you have available rooms\n"
+                "❌ No - if you can't take students\n"
+                "🏠 Full - if your house(s) are currently full"
+            )
+        else:
+            msg = (
+                f"Hi {landlord_name} 👋, this is Talent from the student accommodation placement team.\n\n"
+                f"We are planning ahead for the **next semester** and would like to know if you'll have vacancies in your house(s) in {city}.\n"
+                "Do you expect to have any available rooms for students next semester?\n\n"
+                "Please reply with:\n"
+                "✅ Yes - if you'll have rooms\n"
+                "❌ No - if you won't have rooms\n"
+                "🏠 Full - if your house(s) will be full"
+            )
+        return msg
 
     intro = f"Hello {landlord_name} 👋, this is Talent from the student accommodation placement team."
-
     if multiple_houses:
-        intro += (
-            f" You have more than one house in {city}, so I need to confirm a student directly for one of your houses."
-        )
+        intro += f" You have more than one house in {city}, so I need to confirm a student directly for one of your houses."
+    if semester == "next":
+        intro += " (Next Semester Vacancy Confirmation)"
 
     detail = (
-        f"\n\nStudent: {name}"
-        f"\nPart: {part}"
-        f"\nRoom Type: {room_type}"
-        f"\nGender: {gender.capitalize()}"
-        f"\nCity: {city}"
-        f"\nPreferred House: {house_name}"
-        f"\nBudget: ${budget}"
-        f"\nMove-in: {move_in_date}"
+        f"\n\nStudent: {name}\n"
+        f"Part: {part}\n"
+        f"Room Type: {room_type}\n"
+        f"Gender: {gender}\n"
+        f"City: {city}\n"
+        f"Preferred House: {house_name}\n"
+        f"Budget: ${budget}\n"
+        f"Move-in: {move_in_date}"
     )
 
     confirmation = (
-        "\n\nIs there a room available at your place for this student?"
-        "\nPlease reply with:"
-        "\n✅ Yes - if there's a room"
-        "\n❌ No - if you can't take this student"
-        "\n🏠 Full - if the house is currently full"
+        "\n\nIs there a room available at your place for this student?\n"
+        "Please reply with:\n"
+        "✅ Yes - if there's a room\n"
+        "❌ No - if you can't take this student\n"
+        "🏠 Full - if the house is currently full"
     )
 
     return intro + detail + confirmation
 
-
-def handle_landlord_reply(reply, student):
-    """
-    Handles the landlord's reply according to chat logic.
-
-    Args:
-        reply (str): The reply from the landlord.
-        student (dict): Student and landlord details.
-
-    Returns:
-        str: The response to send to the landlord.
-    """
-    name = student.get("name", "the student")
+def handle_landlord_reply(reply, student, *, context="direct"):
     reply = reply.strip().lower()
-
+    name = student.get("name", "the student")
     if reply in ["yes", "✅"]:
-        return f"Great! I'll let {name} know that a room is available and proceed with confirmation. 🎉"
+        if context == "landlord_initiated":
+            return "Thank you for letting us know about your vacancy! We'll reach out if we have students looking for accommodation. 🏠"
+        elif context.startswith("mass"):
+            return "Thank you for confirming you have available rooms. We'll be in touch with student matches soon. 👍"
+        else:
+            return f"Great! I'll let {name} know that a room is available and proceed with confirmation. 🎉"
     elif reply in ["no", "❌"]:
-        return (
-            f"Noted. We’ll inform {name} that the place is not available."
-            "\nLet us know if anything changes. 🙏"
-        )
+        if context == "landlord_initiated":
+            return "Noted. If you have any updates or future vacancies, please let us know. 🙏"
+        elif context.startswith("mass"):
+            return "Noted. We won't assign students to your house(s) for this semester. Let us know if anything changes."
+        else:
+            return (f"Noted. We’ll inform {name} that the place is not available.\n"
+                    "Let us know if anything changes. 🙏")
     elif reply in ["full", "🏠"]:
-        return (
-            "Okay, we’ll mark the house as full for now and not assign more students."
-            "\nThanks for the update! 🏠"
-        )
+        if context == "landlord_initiated":
+            return "Thanks for the update! We'll mark your house(s) as full for now."
+        elif context.startswith("mass"):
+            return "Thanks for letting us know your house(s) are full. We'll update our records."
+        else:
+            return ("Okay, we’ll mark the house as full for now and not assign more students.\n"
+                    "Thanks for the update! 🏠")
     else:
         return "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
 
+# ==================== Flask Webhook Configuration ====================
+app = Flask(__name__)
 
-# Example test
+@app.route("/", methods=["GET", "POST"])
+def index():
+    return render_template("connected.html")
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == "BOT":
+            logging.info("Webhook verification successful.")
+            return challenge, 200
+        logging.warning("Webhook verification failed.")
+        return "Failed", 403
+
+    elif request.method == "POST":
+        data = request.get_json()
+        logging.info(f"Incoming webhook data: {data}")
+
+        try:
+            # 1. Check that the payload exists and is a dict
+            if not data:
+                logging.error("No data in webhook payload")
+                return jsonify({"status": "error", "reason": "no data"}), 400
+
+            # 2. Extract "entry" and verify structure
+            entry = data.get("entry")
+            if not entry or not isinstance(entry, list) or not entry:
+                logging.error(f"Missing or malformed 'entry'. Actual: {entry}")
+                return jsonify({"status": "error", "reason": "missing entry"}), 400
+
+            entry0 = entry[0]
+            if not isinstance(entry0, dict):
+                logging.error(f"'entry[0]' is not a dict. Actual: {type(entry0)}")
+                return jsonify({"status": "error", "reason": "malformed entry[0]"}), 400
+
+            # 3. Extract "changes" and verify structure
+            changes = entry0.get("changes")
+            if not changes or not isinstance(changes, list) or not changes:
+                logging.error(f"Missing or malformed 'changes'. Actual: {changes}")
+                return jsonify({"status": "error", "reason": "missing changes"}), 400
+
+            changes0 = changes[0]
+            if not isinstance(changes0, dict):
+                logging.error(f"'changes[0]' is not a dict. Actual: {type(changes0)}")
+                return jsonify({"status": "error", "reason": "malformed changes[0]"}), 400
+
+            # 4. Extract "value" dict
+            value = changes0.get("value")
+            if not value or not isinstance(value, dict):
+                logging.error(f"Missing or malformed 'value'. Actual: {value}")
+                return jsonify({"status": "error", "reason": "missing value"}), 400
+
+            # 5. Extract "metadata" and get phone_id, log if missing
+            metadata = value.get("metadata", {})
+            phone_id = metadata.get("phone_number_id")
+            if not phone_id:
+                logging.warning("Missing phone_number_id in metadata.")
+
+            # 6. Extract "messages" list
+            messages = value.get("messages", [])
+            if not messages or not isinstance(messages, list) or not messages:
+                logging.info("No messages in webhook payload")
+                return jsonify({"status": "ok", "reason": "no messages"}), 200
+
+            message = messages[0]
+            if not isinstance(message, dict):
+                logging.error(f"'messages[0]' is not a dict. Actual: {type(message)}")
+                return jsonify({"status": "error", "reason": "malformed messages[0]"}), 400
+
+            # 7. Extract sender and text object, log missing pieces
+            sender = message.get("from")
+            text_obj = message.get("text")
+            if not sender:
+                logging.warning("Message is missing 'from' field.")
+            if not text_obj or not isinstance(text_obj, dict) or "body" not in text_obj:
+                logging.info("Received non-text message or missing text body")
+                if sender and phone_id:
+                    logging.info(f"Prompting sender {sender} to send a text message.")
+                    send("Please send a text message", sender, phone_id)
+                return jsonify({"status": "ok"}), 200
+
+            # 8. Process the text message
+            prompt = text_obj["body"].strip()
+            logging.info(f"Processing message from {sender}: '{prompt}'")
+            user_state = get_user_state(sender)
+            logging.debug(f"Loaded user state for {sender}: {user_state}")
+            response, new_state = message_handler(prompt, user_state)
+            logging.debug(f"Handler response: {response}")
+            save_user_state(sender, new_state)
+            logging.info(f"User state for {sender} updated.")
+
+            # Optionally: uncomment if you want to echo back to WhatsApp
+            # send(response, sender, phone_id)
+        except Exception as e:
+            # Log the error, print stack trace for debugging
+            logging.error(f"Error processing webhook: {e}", exc_info=True)
+
+        # Always return OK to WhatsApp unless payload is malformed
+        return jsonify({"status": "ok"}), 200
+        
+
+# ==================== CLI/Test Block ====================
 if __name__ == "__main__":
+    # CLI/test for local development
+    semester = os.environ.get("SEMESTER", "current")
+    mass_messaging = os.environ.get("MASS_MESSAGING", "false").lower() == "true"
+    initiated_by = os.environ.get("INITIATED_BY", "placement_team")
+
     student_info = {
-        "name": "Sarah Mahombe",
-        "gender": "female",
-        "part": "1.1",
-        "room_type": "2-sharing",
-        "budget": 120,
-        "city": "Harare",
-        "house_name": "Rosewood Villa",
-        "move_in_date": "June 1",
-        "multiple_houses": True,
-        "landlord_name": "Mr. Nyasha"
+        "name": os.environ.get("STUDENT_NAME", "Sarah Mahombe"),
+        "gender": os.environ.get("STUDENT_GENDER", "female"),
+        "part": os.environ.get("STUDENT_PART", "1.1"),
+        "room_type": os.environ.get("STUDENT_ROOM_TYPE", "2-sharing"),
+        "budget": int(os.environ.get("STUDENT_BUDGET", 120)),
+        "city": os.environ.get("STUDENT_CITY", "Harare"),
+        "house_name": os.environ.get("STUDENT_HOUSE_NAME", "Rosewood Villa"),
+        "move_in_date": os.environ.get("STUDENT_MOVE_IN_DATE", "June 1"),
+        "multiple_houses": os.environ.get("MULTIPLE_HOUSES", "true").lower() == "true",
+        "landlord_name": os.environ.get("LANDLORD_NAME", "Mr. Nyasha")
     }
 
-    print(generate_confirmation_message(student_info))
+    user_id = os.environ.get("USER_ID", "test_user_1")
+
+    # Save initial user state with expiry
+    save_user_state(user_id, student_info, expiry_seconds=60)
+    print(f"Saved user state for {user_id} (expires after 60 seconds idle).")
+
+    # Retrieve and print user state
+    loaded_state = get_user_state(user_id)
+    print(f"Loaded user state: {loaded_state}")
+
+    # Demonstrate confirmation message using loaded state
+    print("\n== Confirmation Message ==")
+    print(generate_confirmation_message(
+        loaded_state,
+        semester=semester,
+        mass_messaging=mass_messaging,
+        initiated_by=initiated_by
+    ))
     print()
-    print(handle_landlord_reply("Yes", student_info))
-    print(handle_landlord_reply("No", student_info))
-    print(handle_landlord_reply("Full", student_info))
-    print(handle_landlord_reply("maybe", student_info))
+
+    # Simulate a landlord reply and update user session expiry
+    reply = "Yes"
+    context = "direct"
+    response = handle_landlord_reply(reply, loaded_state, context=context)
+    print(f"Landlord reply ({reply}): {response}")
+
+    # Update and save new state, resetting expiry
+    loaded_state["last_reply"] = reply
+    save_user_state(user_id, loaded_state, expiry_seconds=60)
+    print(f"Updated user state for {user_id} (expiry refreshed).")
+
+    # To run the webhook server:
+    # export FLASK_APP=main.py && flask run --port 5000
+    # Or simply:
+    # python main.py
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
