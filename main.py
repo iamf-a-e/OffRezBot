@@ -61,6 +61,137 @@ def get_user_state(user_id):
     return None
 
 # ==================== Messaging Logic ====================
+
+def message_handler(message, user_state):
+    """
+    Handles incoming messages and determines the appropriate response and next state,
+    with onboarding for first-time users.
+
+    Args:
+        message (str): The incoming message from the user.
+        user_state (dict): The current user's session state.
+
+    Returns:
+        response (str): The reply message to send.
+        new_state (dict): The updated user state.
+    """
+
+    msg = message.strip().lower()
+    landlord_name = user_state.get("landlord_name", "Landlord")
+    student_name = user_state.get("student_name", "the student")
+
+    # --- 1. First time user onboarding ---
+    if not user_state.get("user_type"):
+        # If not set, ask for role
+        if msg in ["landlord", "student"]:
+            user_state["user_type"] = msg
+            if msg == "student":
+                response = (
+                    "Hi! If you are a student, please use the OffRez Student App to find and book accommodation. "
+                    "This bot is for landlords only."
+                )
+                user_state["onboarded"] = True
+                return response, user_state
+            elif msg == "landlord":
+                user_state["initiated_by"] = "landlord"
+                user_state["onboarded"] = True
+                response = (
+                    "Welcome, landlord! 👋\n"
+                    "Let's get you started with student housing registration.\n"
+                    "Please provide your full name and the location of your property to begin the registration process."
+                )
+                return response, user_state
+        else:
+            response = (
+                "Welcome! Are you a 'landlord' or a 'student'?\n"
+                "Please reply with either 'landlord' or 'student'."
+            )
+            return response, user_state
+
+    # --- 2. Normal chat logic after onboarding ---
+    initiated_by = user_state.get("initiated_by", "placement_team")
+    semester = user_state.get("semester", "current")
+    mass_messaging = user_state.get("mass_messaging", False)
+
+    # LANDLORD INITIATES ("Hie" initiated_by_landlord.png)
+    if initiated_by == "landlord":
+        response = (f"Hello {landlord_name}, thank you for reaching out! 👋\n"
+                    "How can we help you today regarding your student accommodation?\n"
+                    "If you have vacancies or updates, please let us know below. 🏠")
+        user_state["last_prompt"] = "awaiting_landlord_info"
+        return response, user_state
+
+    # MASS MESSAGING - current semester
+    if mass_messaging and semester == "current":
+        confirmation = (
+            "Do you have any vacancies for the **current semester**?\n\n"
+            "Please reply with:\n"
+            "✅ Yes - if you have available rooms\n"
+            "❌ No - if you can't take students\n"
+            "🏠 Full - if your house(s) are currently full"
+        )
+        if msg in ["yes", "✅"]:
+            response = "Thank you for confirming you have available rooms. We'll be in touch with student matches soon. 👍"
+        elif msg in ["no", "❌"]:
+            response = "Noted. We won't assign students to your house(s) for this semester. Let us know if anything changes."
+        elif msg in ["full", "🏠"]:
+            response = "Thanks for letting us know your house(s) are full. We'll update our records."
+        else:
+            response = confirmation
+        user_state["last_prompt"] = "current_sem_mass"
+        return response, user_state
+
+    # MASS MESSAGING - next semester
+    if mass_messaging and semester == "next":
+        confirmation = (
+            "Do you expect to have any available rooms for students **next semester**?\n\n"
+            "Please reply with:\n"
+            "✅ Yes - if you'll have rooms\n"
+            "❌ No - if you won't have rooms\n"
+            "🏠 Full - if your house(s) will be full"
+        )
+        if msg in ["yes", "✅"]:
+            response = "Thank you for confirming you'll have available rooms next semester. We'll be in touch with student matches. 👍"
+        elif msg in ["no", "❌"]:
+            response = "Noted. We won't assign students to your house(s) for next semester. Let us know if anything changes."
+        elif msg in ["full", "🏠"]:
+            response = "Thanks for letting us know your house(s) will be full next semester. We'll update our records."
+        else:
+            response = confirmation
+        user_state["last_prompt"] = "next_sem_mass"
+        return response, user_state
+
+    # DIRECT CONFIRMATION (student-initiated or placement team)
+    if not mass_messaging:
+        confirmation = (
+            f"Is there a room available at your place for {student_name}?\n"
+            "Please reply with:\n"
+            "✅ Yes - if there's a room\n"
+            "❌ No - if you can't take this student\n"
+            "🏠 Full - if the house is currently full"
+        )
+        if msg in ["yes", "✅"]:
+            response = f"Great! I'll let {student_name} know that a room is available and proceed with confirmation. 🎉"
+        elif msg in ["no", "❌"]:
+            response = (
+                f"Noted. We’ll inform {student_name} that the place is not available.\n"
+                "Let us know if anything changes. 🙏"
+            )
+        elif msg in ["full", "🏠"]:
+            response = (
+                "Okay, we’ll mark the house as full for now and not assign more students.\n"
+                "Thanks for the update! 🏠"
+            )
+        else:
+            response = confirmation
+        user_state["last_prompt"] = "direct_confirmation"
+        return response, user_state
+
+    # fallback
+    response = "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
+    return response, user_state
+
+
 def generate_confirmation_message(
     student,
     *,
