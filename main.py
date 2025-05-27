@@ -101,8 +101,6 @@ def check_redis_connection():
 
 # ==================== Messaging Logic ====================
 
-from main_final import save_user_state
-
 def message_handler(message, user_state):
     user_id = user_state.get("user_id")  # Ensure user_id is passed into user_state
 
