@@ -170,6 +170,10 @@ def handle_landlord_reply(reply, student, *, context="direct"):
 # ==================== Flask Webhook Configuration ====================
 app = Flask(__name__)
 
+@app.route("/", methods=["GET"])
+def index():
+    return "OffRezBot API is running.", 200
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json if request.is_json else request.form.to_dict()
