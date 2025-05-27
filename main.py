@@ -59,15 +59,22 @@ def validate_whatsapp_number(number):
     clean_number = ''.join(c for c in number if c.isdigit())
     return len(clean_number) >= 10 and len(clean_number) <= 15
 
-def save_user_state(user_id, user_state):
-    url = f"https://suited-mastiff-13088.upstash.io/set/user_state:{user_id}"
-    data = {"value": json.dumps(user_state)}  # value must be a string
-    headers = {
-        "Authorization": f"Bearer {REDIS_TOKEN}"
-    }
-    response = requests.post(url, data=data, headers=headers)
-    response.raise_for_status()  # Will raise if not 200 OK
-    return response.json()
+def save_user_state(user_id, state, expiry_seconds=60):
+    """Save user state to Redis with validation"""
+    if not validate_whatsapp_number(user_id):
+        logger.error(f"Invalid user_id provided: {user_id}")
+        return False
+    if not state or not isinstance(state, dict):
+        logger.error(f"Invalid state provided: {state}")
+        return False
+    
+    try:
+        redis_client.set(f"user_state:{user_id}", json.dumps(state), ex=expiry_seconds)
+        logger.info(f"Successfully saved state for user {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving user state for {user_id}: {str(e)}")
+        return False
 
 def get_user_state(user_id):
     """Get user state from Redis with validation"""
