@@ -111,7 +111,7 @@ def advance(user_id, user_state, new_step, response=None):
    return response, user_state
     
 
-def message_handler(message, user_state):
+def message_handler(sender, message, user_state):
     user_id = user_state.get("user_id")  # Ensure user_id is passed into user_state
 
     # Detect if returning user wants to restart
