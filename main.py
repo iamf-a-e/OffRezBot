@@ -311,6 +311,9 @@ def webhook():
         data = request.get_json()
         logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
         message = data['entry'][0]['changes'][0]['value']['messages'][0]
+        wa_id = message.get("from")
+        contact = data['entry'][0]['changes'][0]['value']['contacts'][0]
+        name = contact['profile']['name']
         msg = message 
 
         try:
