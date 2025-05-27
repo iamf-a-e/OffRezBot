@@ -3,7 +3,7 @@ import json
 import requests
 import logging
 from flask import Flask, request, jsonify, render_template
-from google import gen_api
+import gen_api
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
