@@ -134,8 +134,11 @@ if message.strip().lower() == "hi" and user_state.get("step") == "end":
 
     # Step 2: After verification, collect house attributes
     if step == "get_whatsapp_verification":
-        return advance("approve_manual", "Approval will be done manually for security reasons. Now let’s collect house details.
-Do you have accommodation for *boys*, *girls*, or *mixed*?")
+       return advance(
+            "approve_manual",
+            "Approval will be done manually for security reasons. Now let’s collect house details.\n"
+            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+        )
 
     # Step 3: Gender type
     if step == "approve_manual":
