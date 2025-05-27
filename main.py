@@ -364,24 +364,28 @@ def webhook():
                 # Step 1: Get media URL
                 media_info = requests.get(
                     f"{GRAPH_API_BASE}/{media_id}",
-                    headers={"Authorization": f"Bearer {WA_TOKEN}"}
+                    headers={"Authorization": f"Bearer {wa_token}"}
                 ).json()
                 media_url = media_info.get("url")
-
+            
                 # Step 2: Download image
-                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {WA_TOKEN}"})
+                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
                 image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-
+            
                 # Save to state and persist
                 user_state["image_url"] = image_base64
                 save_user_state(sender, user_state)
+            
+                # Compose and send the approval message
+                approval_msg = advance(
+                    "approve_manual",
+                    f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
+                )
+                send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
+            
+                return jsonify({"reply": approval_msg}), 200
 
-                # Trigger message handler with a dummy message
-                reply, new_state = message_handler("image_received", user_state)
-                # Send reply to user
-                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
-                return jsonify({"reply": reply}), 200
-
+    
             # Handle text messages
             if msg.get("type") == "text":
                 user_msg = msg["text"]["body"].strip()
