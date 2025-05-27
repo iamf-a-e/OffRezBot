@@ -101,23 +101,36 @@ def check_redis_connection():
 
 # ==================== Messaging Logic ====================
 
+from main_final import save_user_state
+
 def message_handler(message, user_state):
+    user_id = user_state.get("user_id")  # Ensure user_id is passed into user_state
+
     # Detect if returning user wants to restart
     if message.strip().lower() == "hi" and user_state.get("step") == "end":
-        return (
-            "Welcome back! What would you like to do today?\n"
-            "1. Post a new vacancy\n"
-            "2. Update existing listing\n"
-            "3. Contact placement team",
-            {"step": "returning_user_menu"}
-        )
+        user_state["step"] = "returning_user_menu"
+        save_user_state(user_id, user_state)
+        return ("Welcome back! What would you like to do today?\n"
+                "1. Post a new vacancy\n"
+                "2. Update existing listing\n"
+                "3. Contact placement team"), user_state
 
     msg = message.strip().lower()
     step = user_state.get("step", "start")
 
-    def advance(new_step, response):
+    def advance(new_step, response=None):
         user_state["step"] = new_step
+        save_user_state(user_id, user_state)
         return response, user_state
+
+    # Handle landlord responses to vacancy confirmations
+    if user_state.get("last_prompt") == "awaiting_landlord_info":
+        if "yes" in msg:
+            return advance("end", "Great! Expect the student's call/message soon. 📞")
+        elif "no" in msg:
+            return advance("end", "Ok thanks")
+        elif "fully occupied" in msg:
+            return advance("end", "Ok, whenever you need students just type the word 'Hie' 👋")
 
     # Step 0: Introduction
     if step == "start":
@@ -134,7 +147,7 @@ def message_handler(message, user_state):
 
     # Step 2: After verification, collect house attributes
     if step == "get_whatsapp_verification":
-       return advance(
+        return advance(
             "approve_manual",
             "Approval will be done manually for security reasons. Now let’s collect house details.\n"
             "Do you have accommodation for *boys*, *girls*, or *mixed*?"
@@ -222,7 +235,6 @@ def message_handler(message, user_state):
         else:
             return advance("confirm_4_sharing", "Please reply with rent in numbers only (e.g. 70).")
 
-
     if step == "returning_user_menu":
         if msg in ["1", "post a new vacancy"]:
             return advance("ask_room_type", "Let’s post a new vacancy.\nHow many *boys* or *girls* do you need accommodation for in *single rooms*?")
@@ -243,29 +255,6 @@ def message_handler(message, user_state):
 
     if step == "end":
         return "You've reached the end of the conversation flow. Type 'Hi' to start again.", user_state
-
-        # Detect if returning user wants to restart
-    if message.strip().lower() == "hi" and user_state.get("step") == "end":
-        return ("Welcome back! What would you like to do today?\n"
-                "1. Post a new vacancy\n"
-                "2. Update existing listing\n"
-                "3. Contact placement team"), {"step": "returning_user_menu"}
-
-    msg = message.strip().lower()
-    step = user_state.get("step", "start")
-
-    def advance(new_step, response=None):
-        user_state["step"] = new_step
-        return response, user_state
-
-    # Handle landlord responses to vacancy confirmations
-    if user_state.get("last_prompt") == "awaiting_landlord_info":
-        if "yes" in msg:
-            return advance("end", "Great! Expect the student's call/message soon. 📞")
-        elif "no" in msg:
-            return advance("end", "Ok thanks")
-        elif "fully occupied" in msg:
-            return advance("end", "Ok, whenever you need students just type the word 'Hie' 👋")
 
     # Fallback
     return "I didn’t get that. Please try again.", user_state
