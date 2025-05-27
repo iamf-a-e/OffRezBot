@@ -174,9 +174,7 @@ def message_handler(message, user_state):
 
             return advance(
                 "approve_manual",
-                f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\n"
-"
-                "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
             )
 
 
