@@ -370,7 +370,7 @@ def webhook():
         # update user state if new student info is provided
         if "student_info" in data:
             user_state.update(data["student_info"])
-            save_user_state(user_id, user_state, expiry_seconds=60)
+            save_user_state(user_id, user_state)
         confirmation = generate_confirmation_message(
             user_state,
             semester=semester,
