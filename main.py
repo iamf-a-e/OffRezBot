@@ -132,7 +132,12 @@ def message_handler(message, user_state):
 
     # Step 0: Introduction
     if step == "start":
-        return advance("ask_user_type", "Hello, I’m the OffRez accommodation assistant. Are you a *student* or a *landlord*?")
+        if "student" in msg:
+            return advance("student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
+        elif "landlord" in msg:
+            return advance("get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
+        else:
+            return advance("start", "Hello, I’m the OffRez accommodation assistant. Are you a *student* or a *landlord*?")
 
     # Step 1: Identify user type
     if step == "ask_user_type":
