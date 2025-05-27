@@ -190,11 +190,14 @@ def message_handler(sender, message, user_state):
         image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
         ext = os.path.splitext(filename)[1].lower()
         return ext in image_extensions
+
+    file = message["file"]  # This might be a dict/object from your framework
+    filename = file["filename"]      # Adjust this key based on your actual data structure
     
     if step == "get_whatsapp_verification":
-        image_url = user_state.get("image_url")
-        if image_url:
-            if is_image_extension(image_url):
+        filename = user_state.get("filename)
+        if filename:
+            if is_image_extension(filename):
                 # Proceed to the next step since it's an image file
                 advance(sender, user_state, "next_step", "Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?")
             else:
