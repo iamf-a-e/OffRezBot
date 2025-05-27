@@ -1,93 +1,223 @@
+import os
+import json
+import time
+import requests
+import logging
+import random
+import string
+from datetime import datetime
+from flask import Flask, request, jsonify, render_template
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+from orders import OrderSystem, Product
 
-def generate_confirmation_message(student):
-    name = student["name"]
-    gender = student["gender"].lower()
+
+logging.basicConfig(level=logging.INFO)
+
+# Environment variables
+wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
+phone_id = os.environ.get("PHONE_ID") 
+gen_api = os.environ.get("GEN_API")    # Gemini API Key
+owner_phone = os.environ.get("OWNER_PHONE")
+
+# Setup Upstash Redis connection using environment variables
+REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
+REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+
+if not REDIS_URL or not REDIS_TOKEN:
+    raise EnvironmentError("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set.")
+
+class UpstashRedisClient:
+    def __init__(self, base_url, token):
+        self.base_url = base_url.rstrip("/")
+        self.headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+    def set(self, key, value, ex=None):
+        url = f"{self.base_url}/set/{key}"
+        payload = {"value": value}
+        if ex is not None:
+            payload["ex"] = ex  # Expiry in seconds
+        response = requests.post(url, headers=self.headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def get(self, key):
+        url = f"{self.base_url}/get/{key}"
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+        result = response.json()
+        return result.get("result")
+
+# Initialize Redis client
+redis_client = UpstashRedisClient(REDIS_URL, REDIS_TOKEN)
+
+def save_user_state(user_id, state, expiry_seconds=60):
+    # Store the state as a JSON string with expiry
+    redis_client.set(f"user_state:{user_id}", json.dumps(state), ex=expiry_seconds)
+
+def get_user_state(user_id):
+    result = redis_client.get(f"user_state:{user_id}")
+    if result:
+        return json.loads(result)
+    return None
+
+def generate_confirmation_message(
+    student,
+    *,
+    semester="current",
+    mass_messaging=False,
+    initiated_by="placement_team"
+):
+    name = student.get("name", "the student")
+    gender = student.get("gender", "male").lower()
     pronoun = "he" if gender == "male" else "she"
-    part = student["part"]
-    room_type = student["room_type"]
-    budget = student["budget"]
-    city = student["city"]
-    house_name = student["house_name"]
-    move_in_date = student["move_in_date"]
-    multiple_houses = student["multiple_houses"]
+    part = student.get("part", "")
+    room_type = student.get("room_type", "")
+    budget = student.get("budget", "")
+    city = student.get("city", "")
+    house_name = student.get("house_name", "")
+    move_in_date = student.get("move_in_date", "")
+    multiple_houses = student.get("multiple_houses", False)
+    landlord_name = student.get("landlord_name", "")
 
-    intro = f"Hello {student['landlord_name']} 👋, this is Talent from the student accommodation placement team."
+    if initiated_by == "landlord":
+        intro = f"Hello {landlord_name}, thank you for reaching out! 👋\n"
+        detail = (
+            "How can we help you today regarding your student accommodation?\n"
+            "If you have vacancies or updates, please let us know below. 🏠"
+        )
+        return intro + detail
 
+    if mass_messaging:
+        if semester == "current":
+            msg = (
+                f"Hi {landlord_name} 👋, this is Talent from the student accommodation placement team.\n\n"
+                f"We are confirming available rooms for the **current semester** in your house(s) in {city}.\n"
+                "Do you have any vacancies?\n\n"
+                "Please reply with:\n"
+                "✅ Yes - if you have available rooms\n"
+                "❌ No - if you can't take students\n"
+                "🏠 Full - if your house(s) are currently full"
+            )
+        else:
+            msg = (
+                f"Hi {landlord_name} 👋, this is Talent from the student accommodation placement team.\n\n"
+                f"We are planning ahead for the **next semester** and would like to know if you'll have vacancies in your house(s) in {city}.\n"
+                "Do you expect to have any available rooms for students next semester?\n\n"
+                "Please reply with:\n"
+                "✅ Yes - if you'll have rooms\n"
+                "❌ No - if you won't have rooms\n"
+                "🏠 Full - if your house(s) will be full"
+            )
+        return msg
+
+    intro = f"Hello {landlord_name} 👋, this is Talent from the student accommodation placement team."
     if multiple_houses:
         intro += f" You have more than one house in {city}, so I need to confirm a student directly for one of your houses."
+    if semester == "next":
+        intro += " (Next Semester Vacancy Confirmation)"
 
     detail = (
-        f"
-
-Student: {name}
-"
-        f"Part: {part}
-"
-        f"Room Type: {room_type}
-"
-        f"Gender: {gender}
-"
-        f"City: {city}
-"
-        f"Preferred House: {house_name}
-"
-        f"Budget: ${budget}
-"
+        f"\n\nStudent: {name}\n"
+        f"Part: {part}\n"
+        f"Room Type: {room_type}\n"
+        f"Gender: {gender}\n"
+        f"City: {city}\n"
+        f"Preferred House: {house_name}\n"
+        f"Budget: ${budget}\n"
         f"Move-in: {move_in_date}"
     )
 
     confirmation = (
-        "
-
-Is there a room available at your place for this student?"
-        "
-Please reply with:
-"
-        "✅ Yes - if there's a room
-"
-        "❌ No - if you can't take this student
-"
+        "\n\nIs there a room available at your place for this student?\n"
+        "Please reply with:\n"
+        "✅ Yes - if there's a room\n"
+        "❌ No - if you can't take this student\n"
         "🏠 Full - if the house is currently full"
     )
 
     return intro + detail + confirmation
 
-
-def handle_landlord_reply(reply, student):
+def handle_landlord_reply(reply, student, *, context="direct"):
     reply = reply.strip().lower()
+    name = student.get("name", "the student")
     if reply in ["yes", "✅"]:
-        return f"Great! I'll let {student['name']} know that a room is available and proceed with confirmation. 🎉"
+        if context == "landlord_initiated":
+            return "Thank you for letting us know about your vacancy! We'll reach out if we have students looking for accommodation. 🏠"
+        elif context.startswith("mass"):
+            return "Thank you for confirming you have available rooms. We'll be in touch with student matches soon. 👍"
+        else:
+            return f"Great! I'll let {name} know that a room is available and proceed with confirmation. 🎉"
     elif reply in ["no", "❌"]:
-        return (
-            f"Noted. We’ll inform {student['name']} that the place is not available."
-            "
-Let us know if anything changes. 🙏"
-        )
+        if context == "landlord_initiated":
+            return "Noted. If you have any updates or future vacancies, please let us know. 🙏"
+        elif context.startswith("mass"):
+            return "Noted. We won't assign students to your house(s) for this semester. Let us know if anything changes."
+        else:
+            return (f"Noted. We’ll inform {name} that the place is not available.\n"
+                    "Let us know if anything changes. 🙏")
     elif reply in ["full", "🏠"]:
-        return (
-            f"Okay, we’ll mark the house as full for now and not assign more students."
-            "
-Thanks for the update! 🏠"
-        )
+        if context == "landlord_initiated":
+            return "Thanks for the update! We'll mark your house(s) as full for now."
+        elif context.startswith("mass"):
+            return "Thanks for letting us know your house(s) are full. We'll update our records."
+        else:
+            return ("Okay, we’ll mark the house as full for now and not assign more students.\n"
+                    "Thanks for the update! 🏠")
     else:
         return "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
 
 
-# Example test
 if __name__ == "__main__":
+    # Optionally get semester and messaging style from environment variables
+    semester = os.environ.get("SEMESTER", "current")
+    mass_messaging = os.environ.get("MASS_MESSAGING", "false").lower() == "true"
+    initiated_by = os.environ.get("INITIATED_BY", "placement_team")
+
+    # Example student info
     student_info = {
-        "name": "Sarah Mahombe",
-        "gender": "female",
-        "part": "1.1",
-        "room_type": "2-sharing",
-        "budget": 120,
-        "city": "Harare",
-        "house_name": "Rosewood Villa",
-        "move_in_date": "June 1",
-        "multiple_houses": True,
-        "landlord_name": "Mr. Nyasha"
+        "name": os.environ.get("STUDENT_NAME", "Sarah Mahombe"),
+        "gender": os.environ.get("STUDENT_GENDER", "female"),
+        "part": os.environ.get("STUDENT_PART", "1.1"),
+        "room_type": os.environ.get("STUDENT_ROOM_TYPE", "2-sharing"),
+        "budget": int(os.environ.get("STUDENT_BUDGET", 120)),
+        "city": os.environ.get("STUDENT_CITY", "Harare"),
+        "house_name": os.environ.get("STUDENT_HOUSE_NAME", "Rosewood Villa"),
+        "move_in_date": os.environ.get("STUDENT_MOVE_IN_DATE", "June 1"),
+        "multiple_houses": os.environ.get("MULTIPLE_HOUSES", "true").lower() == "true",
+        "landlord_name": os.environ.get("LANDLORD_NAME", "Mr. Nyasha")
     }
 
-    print(generate_confirmation_message(student_info))
+    user_id = os.environ.get("USER_ID", "test_user_1")
+
+    # Save initial user state with expiry
+    save_user_state(user_id, student_info, expiry_seconds=60)
+    print(f"Saved user state for {user_id} (expires after 60 seconds idle).")
+
+    # Retrieve and print user state
+    loaded_state = get_user_state(user_id)
+    print(f"Loaded user state: {loaded_state}")
+
+    # Demonstrate confirmation message using loaded state
+    print("\n== Confirmation Message ==")
+    print(generate_confirmation_message(
+        loaded_state,
+        semester=semester,
+        mass_messaging=mass_messaging,
+        initiated_by=initiated_by
+    ))
     print()
-    print(handle_landlord_reply("Yes", student_info))
+
+    # Simulate a landlord reply and update user session expiry
+    reply = "Yes"
+    context = "direct"
+    response = handle_landlord_reply(reply, loaded_state, context=context)
+    print(f"Landlord reply ({reply}): {response}")
+
+    # Update and save new state, resetting expiry
+    loaded_state["last_reply"] = reply
+    save_user_state(user_id, loaded_state, expiry_seconds=60)
+    print(f"Updated user state for {user_id} (expiry refreshed).")
