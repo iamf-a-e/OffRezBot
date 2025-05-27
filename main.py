@@ -337,7 +337,9 @@ def webhook():
                 # Handle different message types
                 if "text" in message:
                     prompt = message["text"]["body"].strip()
-                    message_handler(prompt, sender, phone_id)
+                    user_state = get_user_state(sender)  # fetch state from Redis using the sender (user's WhatsApp ID)
+                    response, new_state = message_handler(prompt, user_state)
+                    save_user_state(sender, new_state)
                 else:
                     logging.info("Received non-text message")
                     send("Please send a text message", sender, phone_id)
