@@ -318,39 +318,58 @@ def webhook():
     elif request.method == "POST":
         data = request.get_json()
         logging.info(f"Incoming webhook data: {data}")  # Add logging
-        
+
+        # Defensive checks to avoid 'NoneType' errors
+        entry = None
+        changes = None
+        value = None
+        messages = None
         try:
-            # Extract message data
+            if not data or "entry" not in data or not data["entry"]:
+                logging.error("Missing or empty 'entry' in webhook payload")
+                return jsonify({"status": "error", "reason": "bad payload"}), 400
+
             entry = data["entry"][0]
+            if not entry or "changes" not in entry or not entry["changes"]:
+                logging.error("Missing or empty 'changes' in webhook payload entry")
+                return jsonify({"status": "error", "reason": "bad payload"}), 400
+
             changes = entry["changes"][0]
-            value = changes["value"]
-            
+            value = changes.get("value") if isinstance(changes, dict) else None
+            if not value or not isinstance(value, dict):
+                logging.error("Missing 'value' in changes")
+                return jsonify({"status": "error", "reason": "bad payload"}), 400
+
             # Get phone_id from metadata
-            phone_id = value["metadata"]["phone_number_id"]
-            
+            phone_id = value.get("metadata", {}).get("phone_number_id")
+
             # Get message details
             messages = value.get("messages", [])
-            if messages:
+            if messages and isinstance(messages, list):
                 message = messages[0]
-                sender = message["from"]
+                sender = message.get("from")
                 
                 # Handle different message types
-                if "text" in message:
+                if "text" in message and message.get("text", {}).get("body"):
                     prompt = message["text"]["body"].strip()
                     user_state = get_user_state(sender)  # fetch state from Redis using the sender (user's WhatsApp ID)
                     response, new_state = message_handler(prompt, user_state)
                     save_user_state(sender, new_state)
                 else:
                     logging.info("Received non-text message")
-                    send("Please send a text message", sender, phone_id)
+                    if sender and phone_id:
+                        send("Please send a text message", sender, phone_id)
+            else:
+                logging.info("No messages found in webhook payload")
                     
         except Exception as e:
             logging.error(f"Error processing webhook: {e}", exc_info=True)
             
         return jsonify({"status": "ok"}), 200
 
-
     # Example: handle a landlord reply via webhook
+    # (This part should likely be outside the webhook route,
+    # but preserved here for reference as per your original code)
     if event_type == "landlord_reply":
         reply = data.get("reply", "")
         context = data.get("context", "direct")
@@ -386,7 +405,6 @@ def webhook():
         })
 
     return jsonify({"status": "error", "message": "Unsupported event_type"}), 400
-
 
 # ==================== CLI/Test Block ====================
 if __name__ == "__main__":
