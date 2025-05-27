@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Environment variables
 wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
+WA_TOKEN = wa_token
 phone_id = os.environ.get("PHONE_ID")
 genai.configure(api_key=os.environ.get("GEN_API"))    # Gemini API Key
 owner_phone = os.environ.get("OWNER_PHONE")
