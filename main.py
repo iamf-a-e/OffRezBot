@@ -7,9 +7,6 @@ import random
 import string
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
-from pymongo import MongoClient
-from bson.objectid import ObjectId
-from orders import OrderSystem, Product
 
 
 logging.basicConfig(level=logging.INFO)
