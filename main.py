@@ -195,7 +195,7 @@ def message_handler(sender, message, user_state):
     filename = file["filename"]      # Adjust this key based on your actual data structure
     
     if step == "get_whatsapp_verification":
-        filename = user_state.get("filename)
+        filename = user_state.get("filename")
         if filename:
             if is_image_extension(filename):
                 # Proceed to the next step since it's an image file
