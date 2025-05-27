@@ -170,17 +170,52 @@ def handle_landlord_reply(reply, student, *, context="direct"):
 # ==================== Flask Webhook Configuration ====================
 app = Flask(__name__)
 
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET", "POST"])
 def index():
-    return "OffRezBot API is running.", 200
+    return render_template("connected.html")
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["GET", "POST"])
 def webhook():
-    data = request.json if request.is_json else request.form.to_dict()
-    user_id = data.get("user_id") or "default_user"
-    event_type = data.get("event_type", "message")
-    # Load or initialize user state
-    user_state = get_user_state(user_id) or {}
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == "BOT":  # Make sure this matches your WhatsApp Business API settings
+            return challenge, 200
+        return "Failed", 403
+
+    elif request.method == "POST":
+        data = request.get_json()
+        logging.info(f"Incoming webhook data: {data}")  # Add logging
+        
+        try:
+            # Extract message data
+            entry = data["entry"][0]
+            changes = entry["changes"][0]
+            value = changes["value"]
+            
+            # Get phone_id from metadata
+            phone_id = value["metadata"]["phone_number_id"]
+            
+            # Get message details
+            messages = value.get("messages", [])
+            if messages:
+                message = messages[0]
+                sender = message["from"]
+                
+                # Handle different message types
+                if "text" in message:
+                    prompt = message["text"]["body"].strip()
+                    message_handler(prompt, sender, phone_id)
+                else:
+                    logging.info("Received non-text message")
+                    send("Please send a text message", sender, phone_id)
+                    
+        except Exception as e:
+            logging.error(f"Error processing webhook: {e}", exc_info=True)
+            
+        return jsonify({"status": "ok"}), 200
+
 
     # Example: handle a landlord reply via webhook
     if event_type == "landlord_reply":
@@ -219,22 +254,6 @@ def webhook():
 
     return jsonify({"status": "error", "message": "Unsupported event_type"}), 400
 
-@app.route("/webhook", methods=["GET"])
-def webhook_get():
-    """GET handler for health checks or simple state inspection"""
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return jsonify({"status": "error", "message": "Missing user_id parameter"}), 400
-
-    user_state = get_user_state(user_id)
-    if user_state is None:
-        return jsonify({"status": "error", "message": "No state found for user"}), 404
-
-    return jsonify({
-        "status": "ok",
-        "user_id": user_id,
-        "state": user_state
-    })
 
 # ==================== CLI/Test Block ====================
 if __name__ == "__main__":
