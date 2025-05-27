@@ -4,6 +4,7 @@ import requests
 import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
+import base64
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +15,7 @@ wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
 phone_id = os.environ.get("PHONE_ID")
 genai.configure(api_key=os.environ.get("GEN_API"))    # Gemini API Key
 owner_phone = os.environ.get("OWNER_PHONE")
+GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 
 # ==================== Upstash Redis Config ====================
 REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
@@ -357,10 +359,37 @@ def webhook():
             # Get or initialize user state
             user_state = get_user_state(sender) or {}
             
+                # Handle image
+            if msg["type"] == "image":
+                media_id = msg["image"]["id"]
+        
+                # Step 1: Get media URL
+                media_info = requests.get(
+                    f"{GRAPH_API_BASE}/{media_id}",
+                    headers={"Authorization": f"Bearer {WA_TOKEN}"}
+                ).json()
+                media_url = media_info.get("url")
+        
+                # Step 2: Download image
+                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {WA_TOKEN}"})
+                image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
+        
+                # Save to state and persist
+                user_state["image_url"] = image_base64
+                save_user_state(from_number, user_state)
+        
+                # Trigger message handler with a dummy message
+                reply, new_state = message_handler("image_received", user_state)
+                return jsonify({
+                    "reply": reply
+                }), 200
+
+            
             # Handle message and get response
             response, new_state = message_handler(prompt, user_state)
             logger.debug(f"Generated response: {response}")
-            
+
+                        
             # Save updated state
             if isinstance(new_state, dict):
                 if not save_user_state(sender, new_state):
