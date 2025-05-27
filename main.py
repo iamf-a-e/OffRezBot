@@ -311,8 +311,10 @@ def webhook():
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == "BOT":  # Match your WhatsApp settings
+        if mode == "subscribe" and token == "BOT":
+            logging.info("Webhook verification successful.")
             return challenge, 200
+        logging.warning("Webhook verification failed.")
         return "Failed", 403
 
     elif request.method == "POST":
@@ -320,53 +322,85 @@ def webhook():
         logging.info(f"Incoming webhook data: {data}")
 
         try:
-            # Defensive checks for each nested field
+            # 1. Check that the payload exists and is a dict
             if not data:
-                logging.error("No data received")
+                logging.error("No data in webhook payload")
                 return jsonify({"status": "error", "reason": "no data"}), 400
 
+            # 2. Extract "entry" and verify structure
             entry = data.get("entry")
             if not entry or not isinstance(entry, list) or not entry:
-                logging.error("Missing or empty 'entry'")
+                logging.error(f"Missing or malformed 'entry'. Actual: {entry}")
                 return jsonify({"status": "error", "reason": "missing entry"}), 400
 
             entry0 = entry[0]
-            changes = entry0.get("changes") if isinstance(entry0, dict) else None
+            if not isinstance(entry0, dict):
+                logging.error(f"'entry[0]' is not a dict. Actual: {type(entry0)}")
+                return jsonify({"status": "error", "reason": "malformed entry[0]"}), 400
+
+            # 3. Extract "changes" and verify structure
+            changes = entry0.get("changes")
             if not changes or not isinstance(changes, list) or not changes:
-                logging.error("Missing or empty 'changes'")
+                logging.error(f"Missing or malformed 'changes'. Actual: {changes}")
                 return jsonify({"status": "error", "reason": "missing changes"}), 400
 
             changes0 = changes[0]
-            value = changes0.get("value") if isinstance(changes0, dict) else None
+            if not isinstance(changes0, dict):
+                logging.error(f"'changes[0]' is not a dict. Actual: {type(changes0)}")
+                return jsonify({"status": "error", "reason": "malformed changes[0]"}), 400
+
+            # 4. Extract "value" dict
+            value = changes0.get("value")
             if not value or not isinstance(value, dict):
-                logging.error("Missing or invalid 'value'")
+                logging.error(f"Missing or malformed 'value'. Actual: {value}")
                 return jsonify({"status": "error", "reason": "missing value"}), 400
 
+            # 5. Extract "metadata" and get phone_id, log if missing
             metadata = value.get("metadata", {})
             phone_id = metadata.get("phone_number_id")
+            if not phone_id:
+                logging.warning("Missing phone_number_id in metadata.")
 
+            # 6. Extract "messages" list
             messages = value.get("messages", [])
-            if not messages or not isinstance(messages, list):
-                logging.info("No messages found")
+            if not messages or not isinstance(messages, list) or not messages:
+                logging.info("No messages in webhook payload")
                 return jsonify({"status": "ok", "reason": "no messages"}), 200
 
             message = messages[0]
+            if not isinstance(message, dict):
+                logging.error(f"'messages[0]' is not a dict. Actual: {type(message)}")
+                return jsonify({"status": "error", "reason": "malformed messages[0]"}), 400
+
+            # 7. Extract sender and text object, log missing pieces
             sender = message.get("from")
             text_obj = message.get("text")
-            if sender and text_obj and "body" in text_obj:
-                prompt = text_obj["body"].strip()
-                user_state = get_user_state(sender)
-                response, new_state = message_handler(prompt, user_state)
-                save_user_state(sender, new_state)
-                # Optionally: send(response, sender, phone_id)
-            else:
-                logging.info("Received non-text message or missing sender/text")
+            if not sender:
+                logging.warning("Message is missing 'from' field.")
+            if not text_obj or not isinstance(text_obj, dict) or "body" not in text_obj:
+                logging.info("Received non-text message or missing text body")
                 if sender and phone_id:
+                    logging.info(f"Prompting sender {sender} to send a text message.")
                     send("Please send a text message", sender, phone_id)
+                return jsonify({"status": "ok"}), 200
 
+            # 8. Process the text message
+            prompt = text_obj["body"].strip()
+            logging.info(f"Processing message from {sender}: '{prompt}'")
+            user_state = get_user_state(sender)
+            logging.debug(f"Loaded user state for {sender}: {user_state}")
+            response, new_state = message_handler(prompt, user_state)
+            logging.debug(f"Handler response: {response}")
+            save_user_state(sender, new_state)
+            logging.info(f"User state for {sender} updated.")
+
+            # Optionally: uncomment if you want to echo back to WhatsApp
+            # send(response, sender, phone_id)
         except Exception as e:
+            # Log the error, print stack trace for debugging
             logging.error(f"Error processing webhook: {e}", exc_info=True)
 
+        # Always return OK to WhatsApp unless payload is malformed
         return jsonify({"status": "ok"}), 200
         
 
