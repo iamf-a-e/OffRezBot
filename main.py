@@ -187,9 +187,9 @@ def message_handler(sender, message, user_state):
 
                 '''
     def is_image_extension(filename):
-    image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
-    ext = os.path.splitext(filename)[1].lower()
-    return ext in image_extensions
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+        ext = os.path.splitext(filename)[1].lower()
+        return ext in image_extensions
     
     if step == "get_whatsapp_verification":
         image_url = user_state.get("image_url")
