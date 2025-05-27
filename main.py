@@ -131,10 +131,11 @@ def message_handler(message, user_state):
     if user_state.get("last_prompt") == "awaiting_landlord_info":
         if "yes" in msg:
             return advance(sender, user_state, "end", "Great! Expect the student's call/message soon. 📞")
-                elif "no" in msg:
-                    return advance(sender, user_state, "end", "Ok thanks")
-                elif "fully occupied" in msg:
-                    return advance(sender, user_state, "end", "Ok, whenever you need students just type the word 'Hie' 👋")
+        elif "no" in msg:
+            return advance(sender, user_state, "end", "Ok thanks")
+        elif "fully occupied" in msg:
+            return advance(sender, user_state, "end", "Ok, whenever you need students just type the word 'Hie' 👋")
+            
 
     # Step 0: Introduction
     if step == "start":
