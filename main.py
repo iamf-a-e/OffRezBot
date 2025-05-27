@@ -244,7 +244,7 @@ def webhook():
             
             # Send response back to WhatsApp
             # Uncomment to enable responses
-            # send(response, sender, phone_id)
+            send(response, sender, phone_id)
             
             return jsonify({"status": "ok"}), 200
 
