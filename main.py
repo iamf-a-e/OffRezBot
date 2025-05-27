@@ -105,7 +105,7 @@ def check_redis_connection():
 
 # ==================== Messaging Logic ====================
 
-def advance(new_step, response=None):
+def advance(user_id, user_state, new_step, response=None):
    user_state["step"] = new_step
    save_user_state(user_id, user_state)
    return response, user_state
