@@ -305,10 +305,13 @@ def webhook():
             return challenge, 200
         logger.warning("Webhook verification failed.")
         return "Failed", 403
+        
 
     elif request.method == "POST":
         data = request.get_json()
         logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
+        message = data['entry'][0]['changes'][0]['value']['messages'][0]
+        msg = message 
 
         try:
             # Validate webhook payload structure
@@ -384,7 +387,16 @@ def webhook():
                     "reply": reply
                 }), 200
 
-            
+
+                # Handle text messages
+            if message.get("type") == "text":
+                user_msg = message["text"]["body"]
+                reply, updated_state = message_handler(user_msg, user_state)
+                return jsonify({"reply": reply}), 200
+        
+            return jsonify({"status": "ignored"}), 200
+
+    
             # Handle message and get response
             response, new_state = message_handler(prompt, user_state)
             logger.debug(f"Generated response: {response}")
