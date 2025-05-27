@@ -381,6 +381,8 @@ def webhook():
                 return jsonify({
                     "reply": reply
                 }), 200
+                send(message, recipient, phone_id)
+                
     
             # Handle text messages
             if msg.get("type") == "text":
@@ -389,6 +391,7 @@ def webhook():
                 reply, updated_state = message_handler(user_msg, user_state)
                 save_user_state(sender, updated_state)
                 return jsonify({"reply": reply}), 200
+                send(message, recipient, phone_id)
     
             # If message is neither image nor text
             logger.info("Received unsupported message type")
