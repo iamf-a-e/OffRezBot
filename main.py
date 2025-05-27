@@ -130,29 +130,29 @@ def message_handler(message, user_state):
     # Handle landlord responses to vacancy confirmations
     if user_state.get("last_prompt") == "awaiting_landlord_info":
         if "yes" in msg:
-            return advance("end", "Great! Expect the student's call/message soon. 📞")
-        elif "no" in msg:
-            return advance("end", "Ok thanks")
-        elif "fully occupied" in msg:
-            return advance("end", "Ok, whenever you need students just type the word 'Hie' 👋")
+            return advance(sender, user_state, "end", "Great! Expect the student's call/message soon. 📞")
+            elif "no" in msg:
+                return advance(sender, user_state, "end", "Ok thanks")
+            elif "fully occupied" in msg:
+                return advance(sender, user_state, "end", "Ok, whenever you need students just type the word 'Hie' 👋")
 
     # Step 0: Introduction
     if step == "start":
         if "student" in msg:
-            return advance("student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
-        elif "landlord" in msg:
-            return advance("get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
-        else:
-            return advance("start", "Hello, I’m the OffRez accommodation assistant. Are you a *student* or a *landlord*?")
+            return advance(sender, user_state, "student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
+            elif "landlord" in msg:
+                return advance(sender, user_state, "get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
+            else:
+                return advance(sender, user_state, "start", "Hello, I’m the OffRez accommodation assistant. Are you a *student* or a *landlord*?")
 
     # Step 1: Identify user type
     if step == "ask_user_type":
         if msg == "landlord":
-            return advance("get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
-        elif msg == "student":
-            return advance("student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
-        else:
-            return advance("ask_user_type", "Please reply with either *student* or *landlord*.")
+            return advance(sender, user_state, "get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
+            elif msg == "student":
+                return advance(sender, user_state, "student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
+            else:
+                return advance(sender, user_state, "ask_user_type", "Please reply with either *student* or *landlord*.")
 
     # Step 2: After verification, collect house attributes
     if step == "get_whatsapp_verification":
@@ -178,6 +178,8 @@ def message_handler(message, user_state):
                 user_state["landlord_name"] = name
 
             return advance(
+                sender,
+                user_state,
                 "approve_manual",
                 f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
             )
@@ -187,101 +189,101 @@ def message_handler(message, user_state):
     if step == "approve_manual":
         if msg in ["boys", "girls", "mixed"]:
             user_state["house_type"] = msg
-            return advance("ask_cat_owner", "Do you have a *cat*?")
+            return advance(sender, user_state, "ask_cat_owner", "Do you have a *cat*?")
         else:
-            return advance("approve_manual", "Please answer with *boys*, *girls*, or *mixed*.")
+            return advance(sender, user_state, "approve_manual", "Please answer with *boys*, *girls*, or *mixed*.")
 
     # Step 4: Ask about cat
     if step == "ask_cat_owner":
         if msg in ["yes", "no"]:
             user_state["has_cat"] = msg
-            return advance("ask_availability", "Do you have a vacancy?")
+            return advance(sender, user_state, "ask_availability", "Do you have a vacancy?")
         else:
-            return advance("ask_cat_owner", "Do you have a *cat*? Please reply *yes* or *no*.")
+            return advance(sender, user_state, "ask_cat_owner", "Do you have a *cat*? Please reply *yes* or *no*.")
 
     # Step 5: Availability
     if step == "ask_availability":
         if msg == "no":
-            return advance("end", "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'")
-        elif msg == "yes":
-            return advance("ask_room_type", "How many *boys* or *girls* do you need accommodation for in *single rooms*? (reply with number only)")
-        else:
-            return advance("ask_availability", "Do you have a vacancy? Please reply *yes* or *no*.")
+            return advance(sender, user_state, "end", "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'")
+            elif msg == "yes":
+                return advance(sender, user_state, "ask_room_type", "How many *boys* or *girls* do you need accommodation for in *single rooms*? (reply with number only)")
+            else:
+                return advance(sender, user_state, "ask_availability", "Do you have a vacancy? Please reply *yes* or *no*.")
 
     # Step 6: Capture room info recursively
     if step.startswith("ask_room_type"):
         if msg.isdigit():
             user_state["room_count"] = int(msg)
-            return advance("confirm_single", f"Confirm your rent for single room (e.g. 1 is $130):")
-        else:
-            return advance("ask_room_type", "Please enter a number for how many students need single rooms.")
+            return advance(sender, user_state, "confirm_single", "Confirm your rent for single room (e.g. 1 is $130):")
+            else:
+                return advance(sender, user_state, "ask_room_type", "Please enter a number for how many students need single rooms.")
 
     if step == "confirm_single":
         if msg.replace(".", "").isdigit():
             user_state["rent_single"] = float(msg)
-            return advance("ask_2_sharing", "How many students need 2-sharing rooms?")
-        else:
-            return advance("confirm_single", "Please reply with rent in numbers only (e.g. 130).")
+            return advance(sender, user_state, "ask_2_sharing", "How many students need 2-sharing rooms?")
+            else:
+                return advance(sender, user_state, "confirm_single", "Please reply with rent in numbers only (e.g. 130).")
 
     if step == "ask_2_sharing":
         if msg.isdigit():
             user_state["2_sharing"] = int(msg)
-            return advance("confirm_2_sharing", "Confirm your rent for 2-sharing (e.g. 2 is $80):")
-        else:
-            return advance("ask_2_sharing", "Please enter number of students for 2-sharing.")
+            return advance(sender, user_state, "confirm_2_sharing", "Confirm your rent for 2-sharing (e.g. 2 is $80):")
+            else:
+                return advance(sender, user_state, "ask_2_sharing", "Please enter number of students for 2-sharing.")
 
     if step == "confirm_2_sharing":
         if msg.replace(".", "").isdigit():
             user_state["rent_2_sharing"] = float(msg)
-            return advance("ask_3_sharing", "How many students need 3-sharing rooms?")
-        else:
-            return advance("confirm_2_sharing", "Please reply with rent in numbers only (e.g. 80).")
+            return advance(sender, user_state, "ask_3_sharing", "How many students need 3-sharing rooms?")
+            else:
+                return advance(sender, user_state, "confirm_2_sharing", "Please reply with rent in numbers only (e.g. 80).")
 
     if step == "ask_3_sharing":
         if msg.isdigit():
             user_state["3_sharing"] = int(msg)
-            return advance("confirm_3_sharing", "Confirm your rent for 3-sharing (e.g. 3 is $60):")
-        else:
-            return advance("ask_3_sharing", "Please enter number of students for 3-sharing.")
+            return advance(sender, user_state, "confirm_3_sharing", "Confirm your rent for 3-sharing (e.g. 3 is $60):")
+            else:
+                return advance(sender, user_state, "ask_3_sharing", "Please enter number of students for 3-sharing.")
 
     if step == "confirm_3_sharing":
         if msg.replace(".", "").isdigit():
             user_state["rent_3_sharing"] = float(msg)
-            return advance("ask_4_sharing", "How many students need 4-sharing rooms?")
-        else:
-            return advance("confirm_3_sharing", "Please reply with rent in numbers only (e.g. 60).")
+            return advance(sender, user_state, "ask_4_sharing", "How many students need 4-sharing rooms?")
+            else:
+                return advance(sender, user_state, "confirm_3_sharing", "Please reply with rent in numbers only (e.g. 60).")
 
     if step == "ask_4_sharing":
         if msg.isdigit():
             user_state["4_sharing"] = int(msg)
-            return advance("confirm_4_sharing", "Confirm your rent for 4-sharing (e.g. 4 is $70):")
-        else:
-            return advance("ask_4_sharing", "Please enter number of students for 4-sharing.")
+            return advance(sender, user_state, "confirm_4_sharing", "Confirm your rent for 4-sharing (e.g. 4 is $70):")
+            else:
+                return advance(sender, user_state, "ask_4_sharing", "Please enter number of students for 4-sharing.")
 
     if step == "confirm_4_sharing":
         if msg.replace(".", "").isdigit():
             user_state["rent_4_sharing"] = float(msg)
-            return advance("end", "Thank you. I'm not a real machine, will get back to you. Whenever you need more students, just type 'Hi'!")
-        else:
-            return advance("confirm_4_sharing", "Please reply with rent in numbers only (e.g. 70).")
+            return advance(sender, user_state, "end", "Thank you. I'm not a real machine, will get back to you. Whenever you need more students, just type 'Hi'!")
+            else:
+                return advance(sender, user_state, "confirm_4_sharing", "Please reply with rent in numbers only (e.g. 70).")
 
     if step == "returning_user_menu":
         if msg in ["1", "post a new vacancy"]:
-            return advance("ask_room_type", "Let’s post a new vacancy.\nHow many *boys* or *girls* do you need accommodation for in *single rooms*?")
-        elif msg in ["2", "update existing listing"]:
-            return advance("update_details", "What detail would you like to update? (e.g. rent, capacity, type)")
-        elif msg in ["3", "contact placement team"]:
-            return advance("contact_team", "Our placement team will reach out shortly. Is there anything specific you’d like us to know?")
-        else:
-            return advance("returning_user_menu", "Please reply with 1, 2 or 3 to select an option.")
+            return advance(sender, user_state, "ask_room_type", "Let’s post a new vacancy.\nHow many *boys* or *girls* do you need accommodation for in *single rooms*?")
+            elif msg in ["2", "update existing listing"]:
+                return advance(sender, user_state, "update_details", "What detail would you like to update? (e.g. rent, capacity, type)")
+            elif msg in ["3", "contact placement team"]:
+                return advance(sender, user_state, "contact_team", "Our placement team will reach out shortly. Is there anything specific you’d like us to know?")
+            else:
+                return advance(sender, user_state, "returning_user_menu", "Please reply with 1, 2 or 3 to select an option.")
 
     if step == "update_details":
         user_state["update_note"] = msg
-        return advance("end", "Thanks! We've noted your update request. Our team will contact you if needed.")
+        return advance(sender, user_state, "end", "Thanks! We've noted your update request. Our team will contact you if needed.")
 
     if step == "contact_team":
         user_state["message_to_team"] = msg
-        return advance("end", "Thanks! We've passed your message to the placement team.")
+        return advance(sender, user_state,"end", "Thanks! We've passed your message to the placement team.")
 
     if step == "end":
         return "You've reached the end of the conversation flow. Type 'Hi' to start again.", user_state
@@ -380,6 +382,8 @@ def webhook():
             
                 # Compose and send the approval message
                 approval_msg = advance(
+                    sender,
+                    user_state,
                     "approve_manual",
                     f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
                 )
