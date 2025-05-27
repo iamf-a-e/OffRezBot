@@ -305,7 +305,6 @@ def webhook():
             return challenge, 200
         logger.warning("Webhook verification failed.")
         return "Failed", 403
-        
 
     elif request.method == "POST":
         data = request.get_json()
@@ -315,49 +314,49 @@ def webhook():
             if not data or not isinstance(data, dict):
                 logger.error("Invalid webhook payload")
                 return jsonify({"status": "error", "message": "Invalid payload"}), 400
-    
+
             entry = data.get("entry", [])
             if not isinstance(entry, list) or not entry:
                 logger.error("Missing or invalid entry in payload")
                 return jsonify({"status": "error", "message": "Invalid entry"}), 400
-    
+
             changes = entry[0].get("changes", [])
             if not isinstance(changes, list) or not changes:
                 logger.error("Missing or invalid changes in payload")
                 return jsonify({"status": "error", "message": "Invalid changes"}), 400
-    
+
             value = changes[0].get("value", {})
             if not isinstance(value, dict):
                 logger.error("Missing or invalid value in payload")
                 return jsonify({"status": "error", "message": "Invalid value"}), 400
-    
+
             messages = value.get("messages", [])
             if not isinstance(messages, list) or not messages:
                 logger.info("No valid messages in payload")
                 return jsonify({"status": "ok", "message": "No messages"}), 200
-    
+
             message = messages[0]
             if not isinstance(message, dict):
                 logger.error("Invalid message format")
                 return jsonify({"status": "error", "message": "Invalid message"}), 400
-    
+
             # Extract sender and validate
             sender = message.get("from")
             if not validate_whatsapp_number(sender):
                 logger.error(f"Invalid sender ID: {sender}")
                 return jsonify({"status": "error", "message": "Invalid sender"}), 400
-    
+
             # Extract contact name if available
             name = None
             if 'contacts' in value and value['contacts']:
                 contact = value['contacts'][0]
                 name = contact.get('profile', {}).get('name', None)
-    
+
             # Get or initialize user state
             user_state = get_user_state(sender) or {}
             user_state["user_id"] = sender
             msg = message  # The incoming message dictionary
-    
+
             # Handle image messages
             if msg.get("type") == "image":
                 media_id = msg["image"]["id"]
@@ -367,54 +366,53 @@ def webhook():
                     headers={"Authorization": f"Bearer {WA_TOKEN}"}
                 ).json()
                 media_url = media_info.get("url")
-    
+
                 # Step 2: Download image
                 image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {WA_TOKEN}"})
                 image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-    
+
                 # Save to state and persist
                 user_state["image_url"] = image_base64
                 save_user_state(sender, user_state)
-    
+
                 # Trigger message handler with a dummy message
                 reply, new_state = message_handler("image_received", user_state)
-                return jsonify({
-                    "reply": reply
-                }), 200
-                send(message, recipient, phone_id)
-                
-    
+                # Send reply to user
+                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
+                return jsonify({"reply": reply}), 200
+
             # Handle text messages
             if msg.get("type") == "text":
                 user_msg = msg["text"]["body"].strip()
                 logger.info(f"Processing message from {sender}: '{user_msg}'")
                 reply, updated_state = message_handler(user_msg, user_state)
                 save_user_state(sender, updated_state)
+                # Send reply to user
+                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
                 return jsonify({"reply": reply}), 200
-                send(message, recipient, phone_id)
-    
+
             # If message is neither image nor text
             logger.info("Received unsupported message type")
             return jsonify({"status": "ignored"}), 200
-    
+
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
-    
+
 
 def send(message, recipient, phone_id):
     """Send message via WhatsApp API with validation"""
     if not all([message, recipient, phone_id]):
         logger.error("Missing required parameters for send()")
         return False
-        
+
     if not validate_whatsapp_number(recipient):
         logger.error(f"Invalid recipient number: {recipient}")
         return False
-        
+
     url = f"https://graph.facebook.com/v13.0/{phone_id}/messages"
     headers = {
-        "Authorization": f"Bearer {wa_token}",
+        "Authorization": f"Bearer {WA_TOKEN}",  # Use WA_TOKEN (consistent with webhook handler)
         "Content-Type": "application/json"
     }
     payload = {
@@ -423,15 +421,18 @@ def send(message, recipient, phone_id):
         "type": "text",
         "text": {"body": message}
     }
-    
+
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
-        logger.info(f"Message sent to {recipient}")
+        logger.info(f"Message sent to {recipient}: {response.text}")
         return True
+
+    
     except Exception as e:
         logger.error(f"Error sending message to {recipient}: {str(e)}")
         return False
+
 
 # ==================== Main Execution ====================
 if __name__ == "__main__":
