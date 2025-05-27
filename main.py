@@ -311,100 +311,64 @@ def webhook():
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == "BOT":  # Make sure this matches your WhatsApp Business API settings
+        if mode == "subscribe" and token == "BOT":  # Match your WhatsApp settings
             return challenge, 200
         return "Failed", 403
 
     elif request.method == "POST":
         data = request.get_json()
-        logging.info(f"Incoming webhook data: {data}")  # Add logging
+        logging.info(f"Incoming webhook data: {data}")
 
-        # Defensive checks to avoid 'NoneType' errors
-        entry = None
-        changes = None
-        value = None
-        messages = None
         try:
-            if not data or "entry" not in data or not data["entry"]:
-                logging.error("Missing or empty 'entry' in webhook payload")
-                return jsonify({"status": "error", "reason": "bad payload"}), 400
+            # Defensive checks for each nested field
+            if not data:
+                logging.error("No data received")
+                return jsonify({"status": "error", "reason": "no data"}), 400
 
-            entry = data["entry"][0]
-            if not entry or "changes" not in entry or not entry["changes"]:
-                logging.error("Missing or empty 'changes' in webhook payload entry")
-                return jsonify({"status": "error", "reason": "bad payload"}), 400
+            entry = data.get("entry")
+            if not entry or not isinstance(entry, list) or not entry:
+                logging.error("Missing or empty 'entry'")
+                return jsonify({"status": "error", "reason": "missing entry"}), 400
 
-            changes = entry["changes"][0]
-            value = changes.get("value") if isinstance(changes, dict) else None
+            entry0 = entry[0]
+            changes = entry0.get("changes") if isinstance(entry0, dict) else None
+            if not changes or not isinstance(changes, list) or not changes:
+                logging.error("Missing or empty 'changes'")
+                return jsonify({"status": "error", "reason": "missing changes"}), 400
+
+            changes0 = changes[0]
+            value = changes0.get("value") if isinstance(changes0, dict) else None
             if not value or not isinstance(value, dict):
-                logging.error("Missing 'value' in changes")
-                return jsonify({"status": "error", "reason": "bad payload"}), 400
+                logging.error("Missing or invalid 'value'")
+                return jsonify({"status": "error", "reason": "missing value"}), 400
 
-            # Get phone_id from metadata
-            phone_id = value.get("metadata", {}).get("phone_number_id")
+            metadata = value.get("metadata", {})
+            phone_id = metadata.get("phone_number_id")
 
-            # Get message details
             messages = value.get("messages", [])
-            if messages and isinstance(messages, list):
-                message = messages[0]
-                sender = message.get("from")
-                
-                # Handle different message types
-                if "text" in message and message.get("text", {}).get("body"):
-                    prompt = message["text"]["body"].strip()
-                    user_state = get_user_state(sender)  # fetch state from Redis using the sender (user's WhatsApp ID)
-                    response, new_state = message_handler(prompt, user_state)
-                    save_user_state(sender, new_state)
-                else:
-                    logging.info("Received non-text message")
-                    if sender and phone_id:
-                        send("Please send a text message", sender, phone_id)
+            if not messages or not isinstance(messages, list):
+                logging.info("No messages found")
+                return jsonify({"status": "ok", "reason": "no messages"}), 200
+
+            message = messages[0]
+            sender = message.get("from")
+            text_obj = message.get("text")
+            if sender and text_obj and "body" in text_obj:
+                prompt = text_obj["body"].strip()
+                user_state = get_user_state(sender)
+                response, new_state = message_handler(prompt, user_state)
+                save_user_state(sender, new_state)
+                # Optionally: send(response, sender, phone_id)
             else:
-                logging.info("No messages found in webhook payload")
-                    
+                logging.info("Received non-text message or missing sender/text")
+                if sender and phone_id:
+                    send("Please send a text message", sender, phone_id)
+
         except Exception as e:
             logging.error(f"Error processing webhook: {e}", exc_info=True)
-            
+
         return jsonify({"status": "ok"}), 200
-
-    # Example: handle a landlord reply via webhook
-    # (This part should likely be outside the webhook route,
-    # but preserved here for reference as per your original code)
-    if event_type == "landlord_reply":
-        reply = data.get("reply", "")
-        context = data.get("context", "direct")
-        response = handle_landlord_reply(reply, user_state, context=context)
-        # Update state with reply and refresh expiry
-        user_state["last_reply"] = reply
-        save_user_state(user_id, user_state, expiry_seconds=60)
-        return jsonify({
-            "status": "ok",
-            "reply": response,
-            "state": user_state
-        })
-
-    # Example: send confirmation message
-    if event_type == "send_confirmation":
-        semester = data.get("semester", "current")
-        mass_messaging = str(data.get("mass_messaging", "false")).lower() == "true"
-        initiated_by = data.get("initiated_by", "placement_team")
-        # update user state if new student info is provided
-        if "student_info" in data:
-            user_state.update(data["student_info"])
-            save_user_state(user_id, user_state)
-        confirmation = generate_confirmation_message(
-            user_state,
-            semester=semester,
-            mass_messaging=mass_messaging,
-            initiated_by=initiated_by
-        )
-        return jsonify({
-            "status": "ok",
-            "confirmation_message": confirmation,
-            "state": user_state
-        })
-
-    return jsonify({"status": "error", "message": "Unsupported event_type"}), 400
+        
 
 # ==================== CLI/Test Block ====================
 if __name__ == "__main__":
