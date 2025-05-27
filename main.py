@@ -3,6 +3,7 @@ import json
 import requests
 import logging
 from flask import Flask, request, jsonify, render_template
+from google import gen_api
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -150,11 +151,34 @@ def message_handler(message, user_state):
 
     # Step 2: After verification, collect house attributes
     if step == "get_whatsapp_verification":
-        return advance(
-            "approve_manual",
-            "Approval will be done manually for security reasons. Now let’s collect house details.\n"
-            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-        )
+        if user_state.get("image_url"):
+            gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + gen_api
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": "Extract the contact name from this WhatsApp screenshot."},
+                            {"inlineData": {"mimeType": "image/jpeg", "data": user_state["image_url"]}}
+                        ]
+                    }
+                ]
+            }
+            try:
+                response = requests.post(gemini_url, headers=headers, json=payload)
+                name = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+                user_state["landlord_name"] = name
+            except Exception as e:
+                name = "(unverified name)"
+                user_state["landlord_name"] = name
+
+            return advance(
+                "approve_manual",
+                f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.
+"
+                "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+            )
+
 
     # Step 3: Gender type
     if step == "approve_manual":
