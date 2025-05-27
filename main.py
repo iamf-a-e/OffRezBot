@@ -155,6 +155,7 @@ def message_handler(sender, message, user_state):
             return advance(sender, user_state, "ask_user_type", "Please reply with either *student* or *landlord*.")
 
     # Step 2: After verification, collect house attributes
+    '''
     if step == "get_whatsapp_verification":
         if user_state.get("image_url"):
             gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + gen_api
@@ -178,11 +179,36 @@ def message_handler(sender, message, user_state):
                 user_state["landlord_name"] = name
 
             return advance(
-                sender,
-                user_state,
-                "approve_manual",
-                f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
+            sender,
+            user_state,
+            "approve_manual",
+            f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
             )
+
+                '''
+    def is_image_extension(filename):
+    image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in image_extensions
+    
+    if step == "get_whatsapp_verification":
+        image_url = user_state.get("image_url")
+        if image_url:
+            if is_image_extension(image_url):
+                # Proceed to the next step since it's an image file
+                advance(sender, user_state, "next_step", "Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?")
+            else:
+                # Not an image, prompt user to upload a valid image file
+                send_message(sender, "The file you uploaded is not a valid image. Please upload a JPG, PNG, or GIF image.")
+                user_state["step"] = "get_whatsapp_verification"
+                save_user_state(sender, user_state)
+                return
+        else:
+            send_message(sender, "Please upload an image to continue.")
+            user_state["step"] = "get_whatsapp_verification"
+            save_user_state(sender, user_state)
+            return
+
 
 
     # Step 3: Gender type
@@ -362,6 +388,7 @@ def webhook():
             user_state["user_id"] = sender
             msg = message  # The incoming message dictionary
 
+          
             # Handle image messages
             if msg.get("type") == "image":
                 media_id = msg["image"]["id"]
@@ -409,6 +436,8 @@ def webhook():
         except Exception as e:
             logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
+            
+            
 
 
 def send(message, recipient, phone_id):
