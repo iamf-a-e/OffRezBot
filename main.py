@@ -312,6 +312,8 @@ def webhook():
         logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
         message = data['entry'][0]['changes'][0]['value']['messages'][0]
         wa_id = message.get("from")
+        user_state = get_user_state(wa_id)  # however you load user state
+        user_state["user_id"] = wa_id
         contact = data['entry'][0]['changes'][0]['value']['contacts'][0]
         name = contact['profile']['name']
         msg = message 
