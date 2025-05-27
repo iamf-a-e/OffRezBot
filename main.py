@@ -3,7 +3,7 @@ import json
 import requests
 import logging
 from flask import Flask, request, jsonify, render_template
-import gen_api
+import google.generativeai as genai
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Environment variables
 wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
 phone_id = os.environ.get("PHONE_ID")
-gen_api = os.environ.get("GEN_API")    # Gemini API Key
+genai.configure(api_key=os.environ.get("GEN_API"))    # Gemini API Key
 owner_phone = os.environ.get("OWNER_PHONE")
 
 # ==================== Upstash Redis Config ====================
