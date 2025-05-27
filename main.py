@@ -20,7 +20,7 @@ phone_id = os.environ.get("PHONE_ID")
 gen_api = os.environ.get("GEN_API")    # Gemini API Key
 owner_phone = os.environ.get("OWNER_PHONE")
 
-# Setup Upstash Redis connection using environment variables
+# ==================== Upstash Redis Config ====================
 REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
 REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 
@@ -55,7 +55,6 @@ class UpstashRedisClient:
 redis_client = UpstashRedisClient(REDIS_URL, REDIS_TOKEN)
 
 def save_user_state(user_id, state, expiry_seconds=60):
-    # Store the state as a JSON string with expiry
     redis_client.set(f"user_state:{user_id}", json.dumps(state), ex=expiry_seconds)
 
 def get_user_state(user_id):
@@ -64,6 +63,7 @@ def get_user_state(user_id):
         return json.loads(result)
     return None
 
+# ==================== Messaging Logic ====================
 def generate_confirmation_message(
     student,
     *,
@@ -170,14 +170,78 @@ def handle_landlord_reply(reply, student, *, context="direct"):
     else:
         return "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
 
+# ==================== Flask Webhook Configuration ====================
+app = Flask(__name__)
 
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json if request.is_json else request.form.to_dict()
+    user_id = data.get("user_id") or "default_user"
+    event_type = data.get("event_type", "message")
+    # Load or initialize user state
+    user_state = get_user_state(user_id) or {}
+
+    # Example: handle a landlord reply via webhook
+    if event_type == "landlord_reply":
+        reply = data.get("reply", "")
+        context = data.get("context", "direct")
+        response = handle_landlord_reply(reply, user_state, context=context)
+        # Update state with reply and refresh expiry
+        user_state["last_reply"] = reply
+        save_user_state(user_id, user_state, expiry_seconds=60)
+        return jsonify({
+            "status": "ok",
+            "reply": response,
+            "state": user_state
+        })
+
+    # Example: send confirmation message
+    if event_type == "send_confirmation":
+        semester = data.get("semester", "current")
+        mass_messaging = str(data.get("mass_messaging", "false")).lower() == "true"
+        initiated_by = data.get("initiated_by", "placement_team")
+        # update user state if new student info is provided
+        if "student_info" in data:
+            user_state.update(data["student_info"])
+            save_user_state(user_id, user_state, expiry_seconds=60)
+        confirmation = generate_confirmation_message(
+            user_state,
+            semester=semester,
+            mass_messaging=mass_messaging,
+            initiated_by=initiated_by
+        )
+        return jsonify({
+            "status": "ok",
+            "confirmation_message": confirmation,
+            "state": user_state
+        })
+
+    return jsonify({"status": "error", "message": "Unsupported event_type"}), 400
+
+@app.route("/webhook", methods=["GET"])
+def webhook_get():
+    """GET handler for health checks or simple state inspection"""
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"status": "error", "message": "Missing user_id parameter"}), 400
+
+    user_state = get_user_state(user_id)
+    if user_state is None:
+        return jsonify({"status": "error", "message": "No state found for user"}), 404
+
+    return jsonify({
+        "status": "ok",
+        "user_id": user_id,
+        "state": user_state
+    })
+
+# ==================== CLI/Test Block ====================
 if __name__ == "__main__":
-    # Optionally get semester and messaging style from environment variables
+    # CLI/test for local development
     semester = os.environ.get("SEMESTER", "current")
     mass_messaging = os.environ.get("MASS_MESSAGING", "false").lower() == "true"
     initiated_by = os.environ.get("INITIATED_BY", "placement_team")
 
-    # Example student info
     student_info = {
         "name": os.environ.get("STUDENT_NAME", "Sarah Mahombe"),
         "gender": os.environ.get("STUDENT_GENDER", "female"),
@@ -221,3 +285,9 @@ if __name__ == "__main__":
     loaded_state["last_reply"] = reply
     save_user_state(user_id, loaded_state, expiry_seconds=60)
     print(f"Updated user state for {user_id} (expiry refreshed).")
+
+    # To run the webhook server:
+    # export FLASK_APP=main.py && flask run --port 5000
+    # Or simply:
+    # python main.py
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
