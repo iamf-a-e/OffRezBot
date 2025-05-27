@@ -52,13 +52,28 @@ class UpstashRedisClient:
 redis_client = UpstashRedisClient(REDIS_URL, REDIS_TOKEN)
 
 def save_user_state(user_id, state, expiry_seconds=60):
-    redis_client.set(f"user_state:{user_id}", json.dumps(state), ex=expiry_seconds)
+    if not user_id or not state:
+        logging.error("Invalid user_id or state provided to save_user_state")
+        return False
+    try:
+        redis_client.set(f"user_state:{user_id}", json.dumps(state), ex=expiry_seconds)
+        return True
+    except Exception as e:
+        logging.error(f"Error saving user state: {e}")
+        return False
 
 def get_user_state(user_id):
-    result = redis_client.get(f"user_state:{user_id}")
-    if result:
-        return json.loads(result)
-    return None
+    if not user_id:
+        logging.error("No user_id provided to get_user_state")
+        return {}
+    try:
+        result = redis_client.get(f"user_state:{user_id}")
+        if result:
+            return json.loads(result)
+        return {}
+    except Exception as e:
+        logging.error(f"Error getting user state: {e}")
+        return {}
 
 # ==================== Messaging Logic ====================
 
@@ -66,15 +81,13 @@ def message_handler(message, user_state):
     """
     Handles incoming messages and determines the appropriate response and next state,
     with onboarding for first-time users.
-
-    Args:
-        message (str): The incoming message from the user.
-        user_state (dict): The current user's session state.
-
-    Returns:
-        response (str): The reply message to send.
-        new_state (dict): The updated user state.
     """
+    # Ensure user_state is always a dict
+    if not isinstance(user_state, dict):
+        user_state = {}
+
+    if not message:
+        return "Please send a valid message", user_state
 
     msg = message.strip().lower()
     landlord_name = user_state.get("landlord_name", "Landlord")
@@ -174,12 +187,12 @@ def message_handler(message, user_state):
             response = f"Great! I'll let {student_name} know that a room is available and proceed with confirmation. 🎉"
         elif msg in ["no", "❌"]:
             response = (
-                f"Noted. We’ll inform {student_name} that the place is not available.\n"
+                f"Noted. We'll inform {student_name} that the place is not available.\n"
                 "Let us know if anything changes. 🙏"
             )
         elif msg in ["full", "🏠"]:
             response = (
-                "Okay, we’ll mark the house as full for now and not assign more students.\n"
+                "Okay, we'll mark the house as full for now and not assign more students.\n"
                 "Thanks for the update! 🏠"
             )
         else:
@@ -188,7 +201,7 @@ def message_handler(message, user_state):
         return response, user_state
 
     # fallback
-    response = "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
+    response = "Sorry, I didn't understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
     return response, user_state
 
 
@@ -199,6 +212,10 @@ def generate_confirmation_message(
     mass_messaging=False,
     initiated_by="placement_team"
 ):
+    # Ensure student is always a dict
+    if not isinstance(student, dict):
+        student = {}
+    
     name = student.get("name", "the student")
     gender = student.get("gender", "male").lower()
     pronoun = "he" if gender == "male" else "she"
@@ -270,6 +287,12 @@ def generate_confirmation_message(
     return intro + detail + confirmation
 
 def handle_landlord_reply(reply, student, *, context="direct"):
+    if not reply:
+        return "Please send a valid response"
+    
+    if not isinstance(student, dict):
+        student = {}
+        
     reply = reply.strip().lower()
     name = student.get("name", "the student")
     if reply in ["yes", "✅"]:
@@ -285,7 +308,7 @@ def handle_landlord_reply(reply, student, *, context="direct"):
         elif context.startswith("mass"):
             return "Noted. We won't assign students to your house(s) for this semester. Let us know if anything changes."
         else:
-            return (f"Noted. We’ll inform {name} that the place is not available.\n"
+            return (f"Noted. We'll inform {name} that the place is not available.\n"
                     "Let us know if anything changes. 🙏")
     elif reply in ["full", "🏠"]:
         if context == "landlord_initiated":
@@ -293,10 +316,10 @@ def handle_landlord_reply(reply, student, *, context="direct"):
         elif context.startswith("mass"):
             return "Thanks for letting us know your house(s) are full. We'll update our records."
         else:
-            return ("Okay, we’ll mark the house as full for now and not assign more students.\n"
+            return ("Okay, we'll mark the house as full for now and not assign more students.\n"
                     "Thanks for the update! 🏠")
     else:
-        return "Sorry, I didn’t understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
+        return "Sorry, I didn't understand your response. Please reply with ✅ Yes, ❌ No, or 🏠 Full."
 
 # ==================== Flask Webhook Configuration ====================
 app = Flask(__name__)
@@ -319,13 +342,13 @@ def webhook():
 
     elif request.method == "POST":
         data = request.get_json()
-        logging.info(f"Incoming webhook data: {data}")
+        logging.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
 
         try:
             # 1. Check that the payload exists and is a dict
-            if not data:
-                logging.error("No data in webhook payload")
-                return jsonify({"status": "error", "reason": "no data"}), 400
+            if not data or not isinstance(data, dict):
+                logging.error("No data or invalid data in webhook payload")
+                return jsonify({"status": "error", "reason": "invalid data"}), 400
 
             # 2. Extract "entry" and verify structure
             entry = data.get("entry")
@@ -377,6 +400,8 @@ def webhook():
             text_obj = message.get("text")
             if not sender:
                 logging.warning("Message is missing 'from' field.")
+                return jsonify({"status": "error", "reason": "missing sender"}), 400
+                
             if not text_obj or not isinstance(text_obj, dict) or "body" not in text_obj:
                 logging.info("Received non-text message or missing text body")
                 if sender and phone_id:
@@ -387,22 +412,55 @@ def webhook():
             # 8. Process the text message
             prompt = text_obj["body"].strip()
             logging.info(f"Processing message from {sender}: '{prompt}'")
-            user_state = get_user_state(sender)
+            
+            # Initialize user state if not exists
+            user_state = get_user_state(sender) or {}
             logging.debug(f"Loaded user state for {sender}: {user_state}")
+            
             response, new_state = message_handler(prompt, user_state)
             logging.debug(f"Handler response: {response}")
-            save_user_state(sender, new_state)
+            
+            if not save_user_state(sender, new_state):
+                logging.error(f"Failed to save state for user {sender}")
+            
             logging.info(f"User state for {sender} updated.")
 
             # Optionally: uncomment if you want to echo back to WhatsApp
             # send(response, sender, phone_id)
+            
         except Exception as e:
             # Log the error, print stack trace for debugging
-            logging.error(f"Error processing webhook: {e}", exc_info=True)
+            logging.error(f"Error processing webhook: {str(e)}", exc_info=True)
+            return jsonify({"status": "error", "reason": str(e)}), 500
 
         # Always return OK to WhatsApp unless payload is malformed
         return jsonify({"status": "ok"}), 200
+
+def send(message, recipient, phone_id):
+    """Send message via WhatsApp API"""
+    if not all([message, recipient, phone_id]):
+        logging.error("Missing required parameters for send()")
+        return False
         
+    url = f"https://graph.facebook.com/v13.0/{phone_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {wa_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": recipient,
+        "type": "text",
+        "text": {"body": message}
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return True
+    except Exception as e:
+        logging.error(f"Error sending WhatsApp message: {e}")
+        return False
 
 # ==================== CLI/Test Block ====================
 if __name__ == "__main__":
@@ -427,8 +485,10 @@ if __name__ == "__main__":
     user_id = os.environ.get("USER_ID", "test_user_1")
 
     # Save initial user state with expiry
-    save_user_state(user_id, student_info, expiry_seconds=60)
-    print(f"Saved user state for {user_id} (expires after 60 seconds idle).")
+    if save_user_state(user_id, student_info, expiry_seconds=60):
+        print(f"Saved user state for {user_id} (expires after 60 seconds idle).")
+    else:
+        print("Failed to save user state")
 
     # Retrieve and print user state
     loaded_state = get_user_state(user_id)
@@ -452,8 +512,10 @@ if __name__ == "__main__":
 
     # Update and save new state, resetting expiry
     loaded_state["last_reply"] = reply
-    save_user_state(user_id, loaded_state, expiry_seconds=60)
-    print(f"Updated user state for {user_id} (expiry refreshed).")
+    if save_user_state(user_id, loaded_state, expiry_seconds=60):
+        print(f"Updated user state for {user_id} (expiry refreshed).")
+    else:
+        print("Failed to update user state")
 
     # To run the webhook server:
     # export FLASK_APP=main.py && flask run --port 5000
