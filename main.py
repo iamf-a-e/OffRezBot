@@ -338,7 +338,6 @@ app = Flask(__name__)
 @app.route("/", methods=["GET"])
 def index():
     return render_template("connected.html")
-
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -377,14 +376,13 @@ def webhook():
             user_state = get_user_state(sender) or {}
             user_state["user_id"] = sender
 
-            # Handle image messages safely
+            # Handle image messages
             if message.get("type") == "image" and "image" in message:
                 media_id = message["image"].get("id")
                 if not media_id:
                     logger.error("Image ID missing")
                     return jsonify({"status": "error", "message": "Missing image ID"}), 400
 
-                # Step 1: Fetch media URL
                 media_info_resp = requests.get(
                     f"{GRAPH_API_BASE}/{media_id}",
                     headers={"Authorization": f"Bearer {wa_token}"}
@@ -399,18 +397,15 @@ def webhook():
                     logger.error("Media URL not found in response")
                     return jsonify({"status": "error", "message": "No media URL"}), 400
 
-                # Step 2: Download media content
                 image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
                 if image_resp.status_code != 200:
                     logger.error(f"Failed to download image: {image_resp.text}")
                     return jsonify({"status": "error", "message": "Failed to download image"}), 400
 
-                # Step 3: Encode image to base64
                 image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
                 user_state["image_url"] = image_base64
                 save_user_state(sender, user_state)
 
-                # Step 4: Send approval message
                 approval_msg = advance(
                     sender,
                     user_state,
@@ -418,45 +413,25 @@ def webhook():
                     f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\nNow let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
                 )
                 send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
-
                 return jsonify({"reply": approval_msg}), 200
 
             # Handle text messages
-        if message.get("type") == "text" and "text" in message:
-            text = message["text"]["body"].strip().lower()
-        
-            response_text = advance(sender, user_state, "handle_text", text)
-            send(response_text, sender, value.get("metadata", {}).get("phone_number_id"))
-        
-            return jsonify({"reply": response_text}), 200
+            if message.get("type") == "text" and "text" in message:
+                text = message["text"]["body"].strip()
+                logger.info(f"Processing text message from {sender}: '{text}'")
+                reply, updated_state = message_handler(sender, text, user_state)
+                save_user_state(sender, updated_state)
+                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
+                return jsonify({"reply": reply}), 200
 
-
-            logger.info("No image or unhandled message type.")
-            return jsonify({"status": "ok", "message": "Unhandled message type"}), 200
+            # Unhandled message types
+            logger.info("Received unsupported message type")
+            return jsonify({"status": "ignored", "message": "Unsupported message type"}), 200
 
         except Exception as e:
             logger.exception("Error handling webhook")
             return jsonify({"status": "error", "message": str(e)}), 500
 
-
-    
-            # Handle text messages
-            if msg.get("type") == "text":
-                message = msg["text"]["body"].strip()
-                logger.info(f"Processing message from {sender}: '{message}'")
-                reply, updated_state = message_handler(sender, message, user_state)
-                save_user_state(sender, updated_state)
-                # Send reply to user
-                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
-                return jsonify({"reply": reply}), 200
-
-            # If message is neither image nor text
-            logger.info("Received unsupported message type")
-            return jsonify({"status": "ignored"}), 200
-
-        except Exception as e:
-            logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
             
             
 
