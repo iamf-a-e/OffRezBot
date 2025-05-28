@@ -200,7 +200,11 @@ if message.get("type") == "image":
     if media_info_resp.status_code != 200:
         send_message(sender, "Failed to get your image. Please try again.")
         return
+
     media_url = media_info_resp.json().get("url")
+    if not media_url:
+        send_message(sender, "Failed to get your image URL. Please try again.")
+        return
 
     # Step 2: Download image content
     image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
@@ -208,26 +212,50 @@ if message.get("type") == "image":
         send_message(sender, "Failed to download your image. Please try again.")
         return
 
+    # Step 3: Detect file extension from Content-Type header
+    content_type = image_resp.headers.get("Content-Type", "")
+    mime_to_ext = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/bmp": ".bmp",
+        "image/tiff": ".tiff",
+        "image/webp": ".webp",
+    }
+    extension = mime_to_ext.get(content_type.lower(), ".jpg")  # default to .jpg if unknown
 
-    # Step 4: Check extension (optional, since you know this is an image)
-    if not is_image_extension(base64):
+    # Step 4: Generate filename based on media_id + extension
+    filename = f"{media_id}{extension}"
+
+    # Step 5: Convert image content to base64
+    image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
+
+    # Optional: Validate extension by your helper function if you want
+    def is_image_extension(fname):
+        allowed_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+        return os.path.splitext(fname)[1].lower() in allowed_exts
+
+    if not is_image_extension(filename):
         send_message(sender, "Please upload a valid image file (jpg, png, gif, etc).")
         return
 
-    # Step 5: Save filename or base64 to user_state
-    user_state["base64"] = filename
+    # Step 6: Save base64 image and filename to user state
+    user_state["image_base64"] = image_base64
+    user_state["image_filename"] = filename
     save_user_state(sender, user_state)
 
-    # Step 6: Proceed to next step
-    approval_msg = advance(sender, user_state, "approve_manual",
-                           "Thanks! Approval will be done manually for security reasons.\n\nNow let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?")
+    # Step 7: Proceed to next step with reply
+    approval_msg = advance(
+        sender,
+        user_state,
+        "approve_manual",
+        "Thanks! Approval will be done manually for security reasons.\n\n"
+        "Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
+    )
     send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
     return
 
-            
-
-
-
+    
     # Step 3: Gender type
     if step == "approve_manual":
         if msg in ["boys", "girls", "mixed"]:
