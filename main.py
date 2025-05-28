@@ -105,10 +105,12 @@ def check_redis_connection():
 
 # ==================== Messaging Logic ====================
 
-def advance(user_id, user_state, new_step, response=None):
-   user_state["step"] = new_step
-   save_user_state(user_id, user_state)
-   return response, user_state
+def advance(sender, user_state, next_step, message):
+    if user_state.get("step") == next_step:
+        return None, user_state  # Don't change or resend
+    user_state['step'] = next_step
+    return message, user_state
+
     
 # Helper to check valid image extension
 def is_image_extension(filename):
