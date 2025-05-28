@@ -700,6 +700,7 @@ def webhook():
                     "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
                 )
                 return reply, user_state
+
             
             # Step 11: confirm_listing
             if step == "confirm_listing":
