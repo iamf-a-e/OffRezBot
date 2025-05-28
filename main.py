@@ -494,7 +494,7 @@ def webhook():
             if message.get("type") == "text" and "text" in message:
                 text = message["text"]["body"].strip()
                 logger.info(f"Processing text message from {sender}: '{text}'")
-                reply, updated_state = message_handler(sender, text, user_state)
+                reply, updated_state = message_handler(sender, text, user_state, , value)
                 save_user_state(sender, updated_state)
                 send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
                 return jsonify({"reply": reply}), 200
