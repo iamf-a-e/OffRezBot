@@ -454,26 +454,38 @@ def webhook():
            
             # Handle image messages
             if message.get("type") == "image" and "image" in message:
-                logger.info("Image message received")
-                logger.debug(f"Full image message payload: {json.dumps(message, indent=2)}")
-            
                 media_id = message["image"].get("id")
-            
                 if not media_id:
-                    logger.error("Image ID is missing in the message payload")
+                    logger.error("Image ID missing")
                     return jsonify({"status": "error", "message": "Missing image ID"}), 400
             
+                logger.info("Image message received")
                 logger.info(f"Image media ID: {media_id}")
-            
-                # Optional: log sender for traceability
-                sender = message.get("from")
                 logger.info(f"Image received from: {sender}")
             
-                # You can add media download logic here if needed
-                # Example: logger.info("Downloading media...")
+                # Get or initialize user state
+                user_state = get_user_state(sender)
+                if 'user' not in user_state:
+                    user_state['user'] = User(sender).to_dict()
+                user_state['sender'] = sender
             
-                return jsonify({"status": "ok", "message": "Image received"}), 200
-
+            
+                # Send approval message
+                name = user_state['user'].get("name", "")
+                send(
+                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                    "Now let’s collect house details.\n\n"
+                    "Do you have accommodation for *boys*, *girls*, or *mixed*?",
+                    sender,
+                    phone_id
+                )
+            
+                # Advance to approve_manual step
+                user_state["step"] = "approve_manual"
+                update_user_state(sender, user_state)
+            
+            
+                return jsonify({"status": "ok"}), 200
 
                 media_info_resp = requests.get(
                     f"{GRAPH_API_BASE}/{media_id}",
