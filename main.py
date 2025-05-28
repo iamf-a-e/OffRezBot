@@ -186,41 +186,44 @@ def message_handler(sender, message, user_state):
             )
 
                 '''
-    def is_image_extension(filename):
-        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
-        ext = os.path.splitext(filename)[1].lower()
-        return ext in image_extensions
+if message.get("type") == "image":
+    media_id = message["image"].get("id")
+    if not media_id:
+        send_message(sender, "Sorry, I couldn't get your image. Please try again.")
+        return
 
-    file = message["file"]  # This might be a dict/object from your framework
-    filename = file["filename"]      # Adjust this key based on your actual data structure
-    
-    if step == "get_whatsapp_verification":
-        filename = user_state.get("filename")
-        filename = None
+    # Step 1: Get media URL
+    media_info_resp = requests.get(
+        f"{GRAPH_API_BASE}/{media_id}",
+        headers={"Authorization": f"Bearer {wa_token}"}
+    )
+    if media_info_resp.status_code != 200:
+        send_message(sender, "Failed to get your image. Please try again.")
+        return
+    media_url = media_info_resp.json().get("url")
 
-        if "image" in user_state:
-            image_filename = user_state["image"].get("filename")
-        # Or if the message itself includes a file or URL
-        elif isinstance(message, dict) and "filename" in message:
-            image_filename = message["filename"]
-        elif isinstance(message, dict) and "url" in message:
-            image_filename = message["url"]
-            
-        if filename:
-            if is_image_extension(filename):
-                # Proceed to the next step since it's an image file
-                advance(sender, user_state, "next_step", "Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?")
-            else:
-                # Not an image, prompt user to upload a valid image file
-                send_message(sender, "The file you uploaded is not a valid image. Please upload a JPG, PNG, or GIF image.")
-                user_state["step"] = "get_whatsapp_verification"
-                save_user_state(sender, user_state)
-                return
-        else:
-            send_message(sender, "Please upload an image to continue.")
-            user_state["step"] = "get_whatsapp_verification"
-            save_user_state(sender, user_state)
-            return
+    # Step 2: Download image content
+    image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
+    if image_resp.status_code != 200:
+        send_message(sender, "Failed to download your image. Please try again.")
+        return
+
+
+    # Step 4: Check extension (optional, since you know this is an image)
+    if not is_image_extension(base64):
+        send_message(sender, "Please upload a valid image file (jpg, png, gif, etc).")
+        return
+
+    # Step 5: Save filename or base64 to user_state
+    user_state["base64"] = filename
+    save_user_state(sender, user_state)
+
+    # Step 6: Proceed to next step
+    approval_msg = advance(sender, user_state, "approve_manual",
+                           "Thanks! Approval will be done manually for security reasons.\n\nNow let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?")
+    send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
+    return
+
             
 
 
