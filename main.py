@@ -119,7 +119,6 @@ def is_image_extension(filename):
 def message_handler(sender, message, user_state, value):
     user_id = user_state.get("user_id")  # Ensure user_id is present
 
-
     if not user_state:
         user_state = {"step": "start"}
 
@@ -400,12 +399,13 @@ def message_handler(sender, message, user_state, value):
         if msg == "hi":
             user_state["step"] = "start"
             save_user_state(sender, user_state)
-            return "Welcome back! Are you a *student* or a *landlord*?", user_state
+            return ("Hello! Are you a *student* or a *landlord*? Please reply with one."), user_state
         else:
-            return "If you want to start again, just type 'Hi'.", user_state
+            return ("Thank you for contacting us. Type 'Hi' if you want to start again."), user_state
 
-    # Catch-all fallback for any unexpected messages
-    return "Sorry, I didn't understand that. Please try again or type 'Hi' to restart.", user_state
+    # Default fallback for any unhandled step
+    return ("Sorry, I did not understand that. Please try again."), user_state
+
 
 # ==================== Flask Webhook Configuration ====================
 app = Flask(__name__)
