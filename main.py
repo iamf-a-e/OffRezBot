@@ -201,7 +201,7 @@ def message_handler(sender, message, user_state, value):
 
     # === Handle text messages ===
     if isinstance(message, str):
-        msg = message.strip().lower()
+        msg = message.get("text", {}).get("body", "").strip().lower()
     else:
         # Unexpected non-text, non-image message
         send_message(sender, "Sorry, I can only process text and images at the moment.")
@@ -552,7 +552,7 @@ def webhook():
             
             # Text message flow
             step = user_state.get("step")
-            msg = message.strip().lower()
+            msg = message.get("text", {}).get("body", "").strip().lower()
             
             # Step 1: approve_manual
             if step == "approve_manual":
