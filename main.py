@@ -111,22 +111,98 @@ def advance(user_id, user_state, new_step, response=None):
    return response, user_state
     
 
-def message_handler(sender, message, user_state):
-    user_id = user_state.get("user_id")  # Ensure user_id is passed into user_state
 
-    # Detect if returning user wants to restart
-    if message.strip().lower() == "hi" and user_state.get("step") == "end":
-        user_state["step"] = "returning_user_menu"
-        save_user_state(user_id, user_state)
-        return ("Welcome back! What would you like to do today?\n"
-                "1. Post a new vacancy\n"
-                "2. Update existing listing\n"
-                "3. Contact placement team"), user_state
+def message_handler(sender, message, user_state, value):
+    user_id = user_state.get("user_id")  # Ensure user_id is present
 
-    msg = message.strip().lower()
+    # Helper to check valid image extension
+    def is_image_extension(fname):
+        allowed_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+        return os.path.splitext(fname)[1].lower() in allowed_exts
+
+    # --- Handle image message ---
+    if isinstance(message, dict) and message.get("type") == "image":
+        media_id = message["image"].get("id")
+        if not media_id:
+            send_message(sender, "Sorry, I couldn't get your image. Please try again.")
+            return None, user_state
+
+        # Step 1: Get media URL
+        media_info_resp = requests.get(
+            f"{GRAPH_API_BASE}/{media_id}",
+            headers={"Authorization": f"Bearer {wa_token}"}
+        )
+        if media_info_resp.status_code != 200:
+            send_message(sender, "Failed to get your image. Please try again.")
+            return None, user_state
+
+        media_url = media_info_resp.json().get("url")
+        if not media_url:
+            send_message(sender, "Failed to get your image URL. Please try again.")
+            return None, user_state
+
+        # Step 2: Download image content
+        image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
+        if image_resp.status_code != 200:
+            send_message(sender, "Failed to download your image. Please try again.")
+            return None, user_state
+
+        # Step 3: Detect file extension from Content-Type header
+        content_type = image_resp.headers.get("Content-Type", "")
+        mime_to_ext = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/bmp": ".bmp",
+            "image/tiff": ".tiff",
+            "image/webp": ".webp",
+        }
+        extension = mime_to_ext.get(content_type.lower(), ".jpg")  # default to .jpg
+
+        # Step 4: Generate filename
+        filename = f"{media_id}{extension}"
+
+        if not is_image_extension(filename):
+            send_message(sender, "Please upload a valid image file (jpg, png, gif, etc).")
+            return None, user_state
+
+        # Step 5: Convert image content to base64 and save
+        image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
+        user_state["image_base64"] = image_base64
+        user_state["image_filename"] = filename
+        save_user_state(sender, user_state)
+
+        # Step 6: Send approval prompt
+        approval_msg = advance(
+            sender,
+            user_state,
+            "approve_manual",
+            "Thanks! Approval will be done manually for security reasons.\n\n"
+            "Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
+        )
+        send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
+        return None, user_state
+
+    # --- Handle text messages ---
+    if isinstance(message, str):
+        msg = message.strip().lower()
+    else:
+        msg = ""
+
     step = user_state.get("step", "start")
 
+    # Detect if returning user wants to restart
+    if msg == "hi" and user_state.get("step") == "end":
+        user_state["step"] = "returning_user_menu"
+        save_user_state(user_id, user_state)
+        return (
+            "Welcome back! What would you like to do today?\n"
+            "1. Post a new vacancy\n"
+            "2. Update existing listing\n"
+            "3. Contact placement team"
+        ), user_state
 
+    # Handling awaiting landlord info
     if user_state.get("last_prompt") == "awaiting_landlord_info":
         if "yes" in msg:
             return advance(sender, user_state, "end", "Great! Expect the student's call/message soon. 📞")
@@ -134,128 +210,31 @@ def message_handler(sender, message, user_state):
             return advance(sender, user_state, "end", "Ok thanks")
         elif "fully occupied" in msg:
             return advance(sender, user_state, "end", "Ok, whenever you need students just type the word 'Hie' 👋")
-            
 
     # Step 0: Introduction
     if step == "start":
         if "student" in msg:
-            return advance(sender, user_state, "student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
+            return advance(sender, user_state, "student_redirect", 
+                           "Please use the student app to check student hostel availability: https://playstore.com/xyz")
         if "landlord" in msg:
-            return advance(sender, user_state, "get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
+            return advance(sender, user_state, "get_whatsapp_verification", 
+                           "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
         else:
-            return advance(sender, user_state, "start", "Hello, I’m the OffRez accommodation assistant. Are you a *student* or a *landlord*?")
+            return advance(sender, user_state, "start", 
+                           "Hello, I’m the OffRez accommodation assistant. Are you a *student* or a *landlord*?")
 
     # Step 1: Identify user type
     if step == "ask_user_type":
         if msg == "landlord":
-            return advance(sender, user_state, "get_whatsapp_verification", "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
+            return advance(sender, user_state, "get_whatsapp_verification", 
+                           "OK. Please send a screenshot of your WhatsApp username with contact name back for verification.")
         if msg == "student":
-            return advance(sender, user_state, "student_redirect", "Please use the student app to check student hostel availability: https://playstore.com/xyz")
+            return advance(sender, user_state, "student_redirect", 
+                           "Please use the student app to check student hostel availability: https://playstore.com/xyz")
         else:
-            return advance(sender, user_state, "ask_user_type", "Please reply with either *student* or *landlord*.")
+            return advance(sender, user_state, "ask_user_type", 
+                           "Please reply with either *student* or *landlord*.")
 
-    # Step 2: After verification, collect house attributes
-    '''
-    if step == "get_whatsapp_verification":
-        if user_state.get("image_url"):
-            gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + gen_api
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": "Extract the contact name from this WhatsApp screenshot."},
-                            {"inlineData": {"mimeType": "image/jpeg", "data": user_state["image_url"]}}
-                        ]
-                    }
-                ]
-            }
-            try:
-                response = requests.post(gemini_url, headers=headers, json=payload)
-                name = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-                user_state["landlord_name"] = name
-            except Exception as e:
-                name = "(unverified name)"
-                user_state["landlord_name"] = name
-
-            return advance(
-            sender,
-            user_state,
-            "approve_manual",
-            f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
-            )
-
-                '''
-if message.get("type") == "image":
-    media_id = message["image"].get("id")
-    if not media_id:
-        send_message(sender, "Sorry, I couldn't get your image. Please try again.")
-        return
-
-    # Step 1: Get media URL
-    media_info_resp = requests.get(
-        f"{GRAPH_API_BASE}/{media_id}",
-        headers={"Authorization": f"Bearer {wa_token}"}
-    )
-    if media_info_resp.status_code != 200:
-        send_message(sender, "Failed to get your image. Please try again.")
-        return
-
-    media_url = media_info_resp.json().get("url")
-    if not media_url:
-        send_message(sender, "Failed to get your image URL. Please try again.")
-        return
-
-    # Step 2: Download image content
-    image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
-    if image_resp.status_code != 200:
-        send_message(sender, "Failed to download your image. Please try again.")
-        return
-
-    # Step 3: Detect file extension from Content-Type header
-    content_type = image_resp.headers.get("Content-Type", "")
-    mime_to_ext = {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/gif": ".gif",
-        "image/bmp": ".bmp",
-        "image/tiff": ".tiff",
-        "image/webp": ".webp",
-    }
-    extension = mime_to_ext.get(content_type.lower(), ".jpg")  # default to .jpg if unknown
-
-    # Step 4: Generate filename based on media_id + extension
-    filename = f"{media_id}{extension}"
-
-    # Step 5: Convert image content to base64
-    image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-
-    # Optional: Validate extension by your helper function if you want
-    def is_image_extension(fname):
-        allowed_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
-        return os.path.splitext(fname)[1].lower() in allowed_exts
-
-    if not is_image_extension(filename):
-        send_message(sender, "Please upload a valid image file (jpg, png, gif, etc).")
-        return
-
-    # Step 6: Save base64 image and filename to user state
-    user_state["image_base64"] = image_base64
-    user_state["image_filename"] = filename
-    save_user_state(sender, user_state)
-
-    # Step 7: Proceed to next step with reply
-    approval_msg = advance(
-        sender,
-        user_state,
-        "approve_manual",
-        "Thanks! Approval will be done manually for security reasons.\n\n"
-        "Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
-    )
-    send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
-    return
-
-    
     # Step 3: Gender type
     if step == "approve_manual":
         if msg in ["boys", "girls", "mixed"]:
@@ -277,7 +256,8 @@ if message.get("type") == "image":
         if msg == "no":
             return advance(sender, user_state, "end", "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'")
         if msg == "yes":
-            return advance(sender, user_state, "ask_room_type", "How many *boys* or *girls* do you need accommodation for in *single rooms*? (reply with number only)")
+            return advance(sender, user_state, "ask_room_type", 
+                           "How many *boys* or *girls* do you need accommodation for in *single rooms*? (reply with number only)")
         else:
             return advance(sender, user_state, "ask_availability", "Do you have a vacancy? Please reply *yes* or *no*.")
 
@@ -334,33 +314,24 @@ if message.get("type") == "image":
     if step == "confirm_4_sharing":
         if msg.replace(".", "").isdigit():
             user_state["rent_4_sharing"] = float(msg)
-            return advance(sender, user_state, "end", "Thank you. I'm not a real machine, will get back to you. Whenever you need more students, just type 'Hi'!")
+            return advance(sender, user_state, "end", 
+                           "Thank you. I'm not a real machine, will get back to you. Whenever you need more students, just type 'Hi'!")
         else:
             return advance(sender, user_state, "confirm_4_sharing", "Please reply with rent in numbers only (e.g. 70).")
 
+    # Returning user menu
     if step == "returning_user_menu":
         if msg in ["1", "post a new vacancy"]:
-            return advance(sender, user_state, "ask_room_type", "Let’s post a new vacancy.\nHow many *boys* or *girls* do you need accommodation for in *single rooms*?")
-        if msg in ["2", "update existing listing"]:
-            return advance(sender, user_state, "update_details", "What detail would you like to update? (e.g. rent, capacity, type)")
-        if msg in ["3", "contact placement team"]:
-            return advance(sender, user_state, "contact_team", "Our placement team will reach out shortly. Is there anything specific you’d like us to know?")
+            return advance(sender, user_state, "get_whatsapp_verification", "Send a screenshot of your WhatsApp username with contact name.")
+        elif msg in ["2", "update existing listing"]:
+            return advance(sender, user_state, "ask_landlord", "Send your Whatsapp username to update your listing.")
+        elif msg in ["3", "contact placement team"]:
+            return advance(sender, user_state, "end", "Call or WhatsApp +263778099830 for the placement team.")
         else:
-            return advance(sender, user_state, "returning_user_menu", "Please reply with 1, 2 or 3 to select an option.")
+            return advance(sender, user_state, "returning_user_menu", "Please select 1, 2, or 3.")
 
-    if step == "update_details":
-        user_state["update_note"] = msg
-        return advance(sender, user_state, "end", "Thanks! We've noted your update request. Our team will contact you if needed.")
-
-    if step == "contact_team":
-        user_state["message_to_team"] = msg
-        return advance(sender, user_state,"end", "Thanks! We've passed your message to the placement team.")
-
-    if step == "end":
-        return "You've reached the end of the conversation flow. Type 'Hi' to start again.", user_state
-
-    # Fallback
-    return "I didn’t get that. Please try again.", user_state
+    # Fallback catch-all
+    return "I didn’t get that. Please try again or type 'Hi' to start over.", user_state
 
 
 # ==================== Flask Webhook Configuration ====================
