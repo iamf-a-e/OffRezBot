@@ -355,82 +355,79 @@ def webhook():
         data = request.get_json()
         logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
         try:
-            # Validate webhook payload structure
-            if not data or not isinstance(data, dict):
-                logger.error("Invalid webhook payload")
-                return jsonify({"status": "error", "message": "Invalid payload"}), 400
-
-            entry = data.get("entry", [])
-            if not isinstance(entry, list) or not entry:
-                logger.error("Missing or invalid entry in payload")
-                return jsonify({"status": "error", "message": "Invalid entry"}), 400
-
-            changes = entry[0].get("changes", [])
-            if not isinstance(changes, list) or not changes:
-                logger.error("Missing or invalid changes in payload")
-                return jsonify({"status": "error", "message": "Invalid changes"}), 400
-
-            value = changes[0].get("value", {})
-            if not isinstance(value, dict):
-                logger.error("Missing or invalid value in payload")
-                return jsonify({"status": "error", "message": "Invalid value"}), 400
-
+            entry = data.get("entry", [])[0]
+            changes = entry.get("changes", [])[0]
+            value = changes.get("value", {})
             messages = value.get("messages", [])
-            if not isinstance(messages, list) or not messages:
+            if not messages:
                 logger.info("No valid messages in payload")
                 return jsonify({"status": "ok", "message": "No messages"}), 200
 
             message = messages[0]
-            if not isinstance(message, dict):
-                logger.error("Invalid message format")
-                return jsonify({"status": "error", "message": "Invalid message"}), 400
-
-            # Extract sender and validate
             sender = message.get("from")
-            if not validate_whatsapp_number(sender):
+            if not sender or not validate_whatsapp_number(sender):
                 logger.error(f"Invalid sender ID: {sender}")
                 return jsonify({"status": "error", "message": "Invalid sender"}), 400
 
-            # Extract contact name if available
             name = None
             if 'contacts' in value and value['contacts']:
                 contact = value['contacts'][0]
-                name = contact.get('profile', {}).get('name', None)
+                name = contact.get('profile', {}).get('name')
 
-            # Get or initialize user state
             user_state = get_user_state(sender) or {}
             user_state["user_id"] = sender
-            msg = message  # The incoming message dictionary
 
-          
-            # Handle image messages
-            if msg.get("type") == "image":
-                media_id = msg["image"]["id"]
-                # Step 1: Get media URL
-                media_info = requests.get(
+            # Handle image messages safely
+            if message.get("type") == "image" and "image" in message:
+                media_id = message["image"].get("id")
+                if not media_id:
+                    logger.error("Image ID missing")
+                    return jsonify({"status": "error", "message": "Missing image ID"}), 400
+
+                # Step 1: Fetch media URL
+                media_info_resp = requests.get(
                     f"{GRAPH_API_BASE}/{media_id}",
                     headers={"Authorization": f"Bearer {wa_token}"}
-                ).json()
-                media_url = media_info.get("url")
-            
-                # Step 2: Download image
+                )
+
+                if media_info_resp.status_code != 200:
+                    logger.error(f"Failed to get media URL: {media_info_resp.text}")
+                    return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
+
+                media_url = media_info_resp.json().get("url")
+                if not media_url:
+                    logger.error("Media URL not found in response")
+                    return jsonify({"status": "error", "message": "No media URL"}), 400
+
+                # Step 2: Download media content
                 image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
+                if image_resp.status_code != 200:
+                    logger.error(f"Failed to download image: {image_resp.text}")
+                    return jsonify({"status": "error", "message": "Failed to download image"}), 400
+
+                # Step 3: Encode image to base64
                 image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-            
-                # Save to state and persist
                 user_state["image_url"] = image_base64
                 save_user_state(sender, user_state)
-            
-                # Compose and send the approval message
+
+                # Step 4: Send approval message
                 approval_msg = advance(
                     sender,
                     user_state,
                     "approve_manual",
-                    f"Thanks {name}. Approval will be done manually for security reasons. Now let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
+                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\nNow let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
                 )
                 send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
-            
+
                 return jsonify({"reply": approval_msg}), 200
+
+            logger.info("No image or unhandled message type.")
+            return jsonify({"status": "ok", "message": "Unhandled message type"}), 200
+
+        except Exception as e:
+            logger.exception("Error handling webhook")
+            return jsonify({"status": "error", "message": str(e)}), 500
+
 
     
             # Handle text messages
