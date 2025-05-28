@@ -178,16 +178,21 @@ def message_handler(sender, message, user_state, value):
         save_user_state(sender, user_state)
 
         # Move conversation forward - example prompt
-        reply_text, user_state = advance(
-            sender,
-            user_state,
-            "approve_manual",
-            "Thanks! Your image is received for manual approval.\n\n"
-            "Next, please provide the house details.\n"
-            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-        )
-        send(reply_text, sender, value.get("metadata", {}).get("phone_number_id"))
+        if user_state.get("step") != "approve_manual":
+            reply_text, user_state = advance(
+                sender,
+                user_state,
+                "approve_manual",
+                "Thanks! Your image is received for manual approval.\n\n"
+                "Next, please provide the house details.\n"
+                "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+            )
+            send(reply_text, sender, value.get("metadata", {}).get("phone_number_id"))
+        else:
+            logger.info(f"User already at step {user_state.get('step')}, not repeating approval message.")
+        
         return None, user_state
+
 
     # === Handle text messages ===
     if isinstance(message, str):
