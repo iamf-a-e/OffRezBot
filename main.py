@@ -557,175 +557,177 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
             
                 # For text messages, extract the text
-                msg = message.get("text", {}).get("body", "").strip().lower()
-            
-                # Step 1: approve_manual
-                if step == "approve_manual":
-                    if msg in ["boys", "girls", "mixed"]:
-                        user_state["house_type"] = msg
-                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
-                        user_state["step"] = "ask_cat_owner"
-                    else:
-                        reply = "Please reply with *boys*, *girls*, or *mixed*."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 2: ask_cat_owner
-                if step == "ask_cat_owner":
-                    if msg in ["yes", "no"]:
-                        user_state["has_cat"] = msg
-                        reply = "Do you have a vacancy? Reply *yes* or *no*."
-                        user_state["step"] = "ask_availability"
-                    else:
-                        reply = "Do you have a cat? Please reply *yes* or *no*."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 3: ask_availability
-                if step == "ask_availability":
-                    if msg == "no":
-                        reply = "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
-                        user_state["step"] = "end"
-                    elif msg == "yes":
-                        reply = "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
-                        user_state["step"] = "ask_room_type"
-                    else:
-                        reply = "Do you have a vacancy? Please reply *yes* or *no*."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 4: ask_room_type
-                if step == "ask_room_type":
-                    if msg.isdigit():
-                        user_state["room_single"] = int(msg)
-                        reply = "Please confirm your rent for a single room (e.g. 130)."
-                        user_state["step"] = "confirm_single"
-                    else:
-                        reply = "Please enter the number of students needing single rooms (number only)."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 5: confirm_single
-                if step == "confirm_single":
-                    try:
-                        rent_single = float(msg)
-                        user_state["rent_single"] = rent_single
-                        reply = "How many students need 2-sharing rooms? (Enter number only)"
-                        user_state["step"] = "ask_2_sharing"
-                    except ValueError:
-                        reply = "Please enter the rent as a number (e.g. 130)."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 6: ask_2_sharing
-                if step == "ask_2_sharing":
-                    if msg.isdigit():
-                        user_state["room_2_sharing"] = int(msg)
-                        reply = "Please confirm your rent for 2-sharing rooms (e.g. 80)."
-                        user_state["step"] = "confirm_2_sharing"
-                    else:
-                        reply = "Please enter number of students needing 2-sharing rooms (number only)."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 7: confirm_2_sharing
-                if step == "confirm_2_sharing":
-                    try:
-                        rent_2_sharing = float(msg)
-                        user_state["rent_2_sharing"] = rent_2_sharing
-                        reply = "How many students need 3-sharing rooms? (Enter number only)"
-                        user_state["step"] = "ask_3_sharing"
-                    except ValueError:
-                        reply = "Please enter the rent as a number (e.g. 80)."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 8: ask_3_sharing
-                if step == "ask_3_sharing":
-                    if msg.isdigit():
-                        user_state["room_3_sharing"] = int(msg)
-                        reply = "Please confirm your rent for 3-sharing rooms (e.g. 60)."
-                        user_state["step"] = "confirm_3_sharing"
-                    else:
-                        reply = "Please enter number of students needing 3-sharing rooms (number only)."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 9: confirm_3_sharing
-                if step == "confirm_3_sharing":
-                    try:
-                        rent_3_sharing = float(msg)
-                        user_state["rent_3_sharing"] = rent_3_sharing
-                        reply = "What age group are the students? (e.g. 18-22)"
-                        user_state["step"] = "ask_student_age"
-                    except ValueError:
-                        reply = "Please enter the rent as a number (e.g. 60)."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 10: ask_student_age
-                if step == "ask_student_age":
-                    # Use msg (already extracted)
-                    user_state["student_age"] = msg
-                    reply = "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
-                    user_state["step"] = "confirm_listing"
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 11: confirm_listing
-                if step == "confirm_listing":
-                    if msg == "confirm":
-                        reply = "Thank you! Your listing will be published soon. Expect calls from students if you have vacancies."
-                        user_state["step"] = "end"
-                        # Save final state
-                        save_user_state(sender, user_state)
-                    elif msg == "cancel":
-                        reply = "Your listing was cancelled. Type 'Hi' to start over."
-                        user_state["step"] = "end"
-                        save_user_state(sender, user_state)
-                    else:
-                        reply = "Please type *confirm* to publish your listing or *cancel* to abort."
-                        # No step change here
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Step 12: end
-                if step == "end":
-                    if msg == "hi":
-                        reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
-                        user_state["step"] = "start"
-                        save_user_state(sender, user_state)
-                    else:
-                        reply = "Thank you for contacting us. Type 'Hi' if you want to start again."
-            
-                    send(reply, sender, phone_id)
-                    update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
-            
-                # Fallback for unknown steps or unhandled messages
-                reply = "Sorry, I did not understand that. Please try again."
+                if message.get("type") == "text":
+                    msg = message.get("text", {}).get("body", "").strip().lower()
+                
+                    # Step 1: approve_manual
+                    if step == "approve_manual":
+                        if msg in ["boys", "girls", "mixed"]:
+                            user_state["house_type"] = msg
+                            reply = "Do you have a *cat*? Please reply *yes* or *no*."
+                            user_state["step"] = "ask_cat_owner"
+                        else:
+                            reply = "Please reply with *boys*, *girls*, or *mixed*."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 2: ask_cat_owner
+                    if step == "ask_cat_owner":
+                        if msg in ["yes", "no"]:
+                            user_state["has_cat"] = msg
+                            reply = "Do you have a vacancy? Reply *yes* or *no*."
+                            user_state["step"] = "ask_availability"
+                        else:
+                            reply = "Do you have a cat? Please reply *yes* or *no*."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 3: ask_availability
+                    if step == "ask_availability":
+                        if msg == "no":
+                            reply = "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
+                            user_state["step"] = "end"
+                        elif msg == "yes":
+                            reply = "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
+                            user_state["step"] = "ask_room_type"
+                        else:
+                            reply = "Do you have a vacancy? Please reply *yes* or *no*."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 4: ask_room_type
+                    if step == "ask_room_type":
+                        if msg.isdigit():
+                            user_state["room_single"] = int(msg)
+                            reply = "Please confirm your rent for a single room (e.g. 130)."
+                            user_state["step"] = "confirm_single"
+                        else:
+                            reply = "Please enter the number of students needing single rooms (number only)."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 5: confirm_single
+                    if step == "confirm_single":
+                        try:
+                            rent_single = float(msg)
+                            user_state["rent_single"] = rent_single
+                            reply = "How many students need 2-sharing rooms? (Enter number only)"
+                            user_state["step"] = "ask_2_sharing"
+                        except ValueError:
+                            reply = "Please enter the rent as a number (e.g. 130)."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 6: ask_2_sharing
+                    if step == "ask_2_sharing":
+                        if msg.isdigit():
+                            user_state["room_2_sharing"] = int(msg)
+                            reply = "Please confirm your rent for 2-sharing rooms (e.g. 80)."
+                            user_state["step"] = "confirm_2_sharing"
+                        else:
+                            reply = "Please enter number of students needing 2-sharing rooms (number only)."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 7: confirm_2_sharing
+                    if step == "confirm_2_sharing":
+                        try:
+                            rent_2_sharing = float(msg)
+                            user_state["rent_2_sharing"] = rent_2_sharing
+                            reply = "How many students need 3-sharing rooms? (Enter number only)"
+                            user_state["step"] = "ask_3_sharing"
+                        except ValueError:
+                            reply = "Please enter the rent as a number (e.g. 80)."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 8: ask_3_sharing
+                    if step == "ask_3_sharing":
+                        if msg.isdigit():
+                            user_state["room_3_sharing"] = int(msg)
+                            reply = "Please confirm your rent for 3-sharing rooms (e.g. 60)."
+                            user_state["step"] = "confirm_3_sharing"
+                        else:
+                            reply = "Please enter number of students needing 3-sharing rooms (number only)."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 9: confirm_3_sharing
+                    if step == "confirm_3_sharing":
+                        try:
+                            rent_3_sharing = float(msg)
+                            user_state["rent_3_sharing"] = rent_3_sharing
+                            reply = "What age group are the students? (e.g. 18-22)"
+                            user_state["step"] = "ask_student_age"
+                        except ValueError:
+                            reply = "Please enter the rent as a number (e.g. 60)."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 10: ask_student_age
+                    if step == "ask_student_age":
+                        # Use msg (already extracted)
+                        user_state["student_age"] = msg
+                        reply = "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
+                        user_state["step"] = "confirm_listing"
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 11: confirm_listing
+                    if step == "confirm_listing":
+                        if msg == "confirm":
+                            reply = "Thank you! Your listing will be published soon. Expect calls from students if you have vacancies."
+                            user_state["step"] = "end"
+                            # Save final state
+                            save_user_state(sender, user_state)
+                        elif msg == "cancel":
+                            reply = "Your listing was cancelled. Type 'Hi' to start over."
+                            user_state["step"] = "end"
+                            save_user_state(sender, user_state)
+                        else:
+                            reply = "Please type *confirm* to publish your listing or *cancel* to abort."
+                            # No step change here
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Step 12: end
+                    if step == "end":
+                        if msg == "hi":
+                            reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
+                            user_state["step"] = "start"
+                            save_user_state(sender, user_state)
+                        else:
+                            reply = "Thank you for contacting us. Type 'Hi' if you want to start again."
+                
+                        send(reply, sender, phone_id)
+                        update_user_state(sender, user_state)
+                        return jsonify({"status": "ok"}), 200
+                
+                    # Fallback for unknown steps or unhandled messages
+                    reply = "Sorry, I did not understand that. Please try again."
+                    
                 send(reply, sender, phone_id)
                 update_user_state(sender, user_state)
                 return jsonify({"status": "ok"}), 200
