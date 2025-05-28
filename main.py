@@ -733,9 +733,9 @@ def webhook():
                 headers={"Authorization": f"Bearer {wa_token}"}
             )
             
-                if media_info_resp.status_code != 200:
-                    logger.error(f"Failed to get media URL: {media_info_resp.text}")
-                    return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
+            if media_info_resp.status_code != 200:
+                logger.error(f"Failed to get media URL: {media_info_resp.text}")
+                return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
             
                 media_url = media_info_resp.json().get("url")
                 if not media_url:
