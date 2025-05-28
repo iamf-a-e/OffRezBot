@@ -463,10 +463,10 @@ def handle_approve_manual(prompt, user_data, phone_id):
 
 def update_user_state(sender, user_state):
     # Convert user_state dict to JSON string and save it
-    redis.set(sender, json.dumps(user_state), ex=60)  # expire after 1 min
+    redis_client.set(sender, json.dumps(user_state), ex=60)  # expire after 1 min
 
 def get_user_state(sender):
-    data = redis.get(sender)
+    data = redis_client.get(sender)
     if data:
         return json.loads(data)
     return {}  # default if no state stored yet
