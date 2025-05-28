@@ -727,11 +727,11 @@ def webhook():
             return ("Sorry, I did not understand that. Please try again."), user_state
 
 
-                # Process image if already in approve_manual step
-                media_info_resp = requests.get(
-                    f"{GRAPH_API_BASE}/{media_id}",
-                    headers={"Authorization": f"Bearer {wa_token}"}
-                )
+            # Process image if already in approve_manual step
+            media_info_resp = requests.get(
+                f"{GRAPH_API_BASE}/{media_id}",
+                headers={"Authorization": f"Bearer {wa_token}"}
+            )
             
                 if media_info_resp.status_code != 200:
                     logger.error(f"Failed to get media URL: {media_info_resp.text}")
