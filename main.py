@@ -421,6 +421,16 @@ def webhook():
 
                 return jsonify({"reply": approval_msg}), 200
 
+            # Handle text messages
+        if message.get("type") == "text" and "text" in message:
+            text = message["text"]["body"].strip().lower()
+        
+            response_text = advance(sender, user_state, "handle_text", text)
+            send(response_text, sender, value.get("metadata", {}).get("phone_number_id"))
+        
+            return jsonify({"reply": response_text}), 200
+
+
             logger.info("No image or unhandled message type.")
             return jsonify({"status": "ok", "message": "Unhandled message type"}), 200
 
