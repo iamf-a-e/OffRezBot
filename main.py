@@ -508,12 +508,13 @@ def webhook():
                 logger.info(f"Image media ID: {media_id}")
                 logger.info(f"Image received from: {sender}")
             
+                # Get user state
                 user_state = get_user_state(sender)
                 if 'user' not in user_state:
                     user_state['user'] = User(sender).to_dict()
                 user_state['sender'] = sender
             
-                # ONLY if not already at or beyond approval step
+                # Only send approval message and set step if not already at this step
                 if user_state.get("step") != "approve_manual":
                     name = user_state['user'].get("name", "")
                     send(
@@ -527,6 +528,32 @@ def webhook():
                     update_user_state(sender, user_state)
                     return jsonify({"status": "ok"}), 200
             
+                # Process image if already in approve_manual step
+                media_info_resp = requests.get(
+                    f"{GRAPH_API_BASE}/{media_id}",
+                    headers={"Authorization": f"Bearer {wa_token}"}
+                )
+            
+                if media_info_resp.status_code != 200:
+                    logger.error(f"Failed to get media URL: {media_info_resp.text}")
+                    return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
+            
+                media_url = media_info_resp.json().get("url")
+                if not media_url:
+                    logger.error("Media URL not found in response")
+                    return jsonify({"status": "error", "message": "No media URL"}), 400
+            
+                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
+                if image_resp.status_code != 200:
+                    logger.error(f"Failed to download image: {image_resp.text}")
+                    return jsonify({"status": "error", "message": "Failed to download image"}), 400
+            
+                image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
+                user_state["image_url"] = image_base64
+                update_user_state(sender, user_state)
+            
+                # Don’t send the approval message again here
+                return jsonify({"status": "image processed"}), 200
 
 
             # Handle text messages
