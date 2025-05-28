@@ -21,7 +21,7 @@ owner_phone = os.environ.get("OWNER_PHONE")
 GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 
 # ==================== Upstash Redis Config ====================
-redis_client = redis.from_url("UPSTASH_REDIS_REST_URL", decode_responses=True)
+redis_client = redis.from_url("https://suited-mastiff-13088.upstash.io", decode_responses=True)
 REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
 REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 
