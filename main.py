@@ -138,7 +138,7 @@ def message_handler(sender, message, user_state, value):
 
         # Get media URL from WhatsApp Graph API
         media_resp = requests.get(
-            f"{GRAPH_API_BASE}/{media_id}",
+            url = f"{GRAPH_API_BASE}/{media_id}",
             headers={"Authorization": f"Bearer {WA_TOKEN}"}
         )
         if media_resp.status_code != 200:
