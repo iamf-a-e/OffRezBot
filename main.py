@@ -499,23 +499,22 @@ def webhook():
            
             # Handle image messages
             if message.get("type") == "image" and "image" in message:
-                media_id = message["image"].get("id")
-                if not media_id:
-                    logger.error("Image ID missing")
-                    return jsonify({"status": "error", "message": "Missing image ID"}), 400
-            
-                logger.info("Image message received")
-                logger.info(f"Image media ID: {media_id}")
-                logger.info(f"Image received from: {sender}")
-            
-                # Get or initialize user state
-                user_state = get_user_state(sender)
-                if 'user' not in user_state:
-                    user_state['user'] = User(sender).to_dict()
-                user_state['sender'] = sender
-            
-            
-                # Send approval message
+            media_id = message["image"].get("id")
+            if not media_id:
+                logger.error("Image ID missing")
+                return jsonify({"status": "error", "message": "Missing image ID"}), 400
+        
+            logger.info("Image message received")
+            logger.info(f"Image media ID: {media_id}")
+            logger.info(f"Image received from: {sender}")
+        
+            user_state = get_user_state(sender)
+            if 'user' not in user_state:
+                user_state['user'] = User(sender).to_dict()
+            user_state['sender'] = sender
+        
+            # ONLY if not already at or beyond approval step
+            if user_state.get("step") != "approve_manual":
                 name = user_state['user'].get("name", "")
                 send(
                     f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
@@ -524,45 +523,11 @@ def webhook():
                     sender,
                     phone_id
                 )
-            
-                # Advance to approve_manual step
                 user_state["step"] = "approve_manual"
                 update_user_state(sender, user_state)
-            
-            
                 return jsonify({"status": "ok"}), 200
+        
 
-                media_info_resp = requests.get(
-                    f"{GRAPH_API_BASE}/{media_id}",
-                    headers={"Authorization": f"Bearer {wa_token}"}
-                )
-
-                if media_info_resp.status_code != 200:
-                    logger.error(f"Failed to get media URL: {media_info_resp.text}")
-                    return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
-
-                media_url = media_info_resp.json().get("url")
-                if not media_url:
-                    logger.error("Media URL not found in response")
-                    return jsonify({"status": "error", "message": "No media URL"}), 400
-
-                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
-                if image_resp.status_code != 200:
-                    logger.error(f"Failed to download image: {image_resp.text}")
-                    return jsonify({"status": "error", "message": "Failed to download image"}), 400
-
-                image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-                user_state["image_url"] = image_base64
-                save_user_state(sender, user_state)
-
-                approval_msg = advance(
-                    sender,
-                    user_state,
-                    "approve_manual",
-                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\nNow let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
-                )
-                send(approval_msg, sender, value.get("metadata", {}).get("phone_number_id"))
-                return jsonify({"reply": approval_msg}), 200
 
             # Handle text messages
             if message.get("type") == "text" and "text" in message:
@@ -581,8 +546,6 @@ def webhook():
             logger.exception("Error handling webhook")
             return jsonify({"status": "error", "message": str(e)}), 500
 
-            
-            
 
 
 def send(message, recipient, phone_id):
