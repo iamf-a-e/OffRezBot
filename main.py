@@ -451,12 +451,29 @@ def webhook():
             user_state = get_user_state(sender) or {}
             user_state["user_id"] = sender
 
+           
             # Handle image messages
             if message.get("type") == "image" and "image" in message:
+                logger.info("Image message received")
+                logger.debug(f"Full image message payload: {json.dumps(message, indent=2)}")
+            
                 media_id = message["image"].get("id")
+            
                 if not media_id:
-                    logger.error("Image ID missing")
+                    logger.error("Image ID is missing in the message payload")
                     return jsonify({"status": "error", "message": "Missing image ID"}), 400
+            
+                logger.info(f"Image media ID: {media_id}")
+            
+                # Optional: log sender for traceability
+                sender = message.get("from")
+                logger.info(f"Image received from: {sender}")
+            
+                # You can add media download logic here if needed
+                # Example: logger.info("Downloading media...")
+            
+                return jsonify({"status": "ok", "message": "Image received"}), 200
+
 
                 media_info_resp = requests.get(
                     f"{GRAPH_API_BASE}/{media_id}",
