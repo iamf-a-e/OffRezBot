@@ -596,6 +596,12 @@ def webhook():
                             user_state["step"] = "ask_room_type"
                         else:
                             reply = "Do you have a vacancy? Please reply *yes* or *no*."
+
+                media_info_resp = requests.get(
+                f"{GRAPH_API_BASE}/{media_id}",
+                headers={"Authorization": f"Bearer {wa_token}"}
+            )
+            
                 
                         send(reply, sender, phone_id)
                         update_user_state(sender, user_state)
@@ -732,11 +738,7 @@ def webhook():
                 update_user_state(sender, user_state)
                 return jsonify({"status": "ok"}), 200
             # Process image if already in approve_manual step
-            media_info_resp = requests.get(
-                f"{GRAPH_API_BASE}/{media_id}",
-                headers={"Authorization": f"Bearer {wa_token}"}
-            )
-            
+
             if media_info_resp.status_code != 200:
                 logger.error(f"Failed to get media URL: {media_info_resp.text}")
                 return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
