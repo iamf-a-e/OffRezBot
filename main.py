@@ -758,52 +758,7 @@ def handle_message(message, sender, phone_id):
         return jsonify({"status": "ok"}), 200
             
 
-
-
            
-            
-                    
-            if media_info_resp.status_code != 200:
-                logger.error(f"Failed to get media URL: {media_info_resp.text}")
-                return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
-            
-                media_url = media_info_resp.json().get("url")
-                if not media_url:
-                    logger.error("Media URL not found in response")
-                    return jsonify({"status": "error", "message": "No media URL"}), 400
-            
-                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
-                if image_resp.status_code != 200:
-                    logger.error(f"Failed to download image: {image_resp.text}")
-                    return jsonify({"status": "error", "message": "Failed to download image"}), 400
-            
-                image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-                user_state["image_url"] = image_base64
-                update_user_state(sender, user_state)
-            
-                # Don’t send the approval message again here
-                return jsonify({"status": "image processed"}), 200
-
-
-            # Handle text messages
-            if message.get("type") == "text" and "text" in message:
-                text = message["text"]["body"].strip()
-                logger.info(f"Processing text message from {sender}: '{text}'")
-                reply, updated_state = message_handler(sender, text, user_state, value)
-                save_user_state(sender, updated_state)
-                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
-                return jsonify({"reply": reply}), 200
-
-            # Unhandled message types
-            logger.info("Received unsupported message type")
-            return jsonify({"status": "ignored", "message": "Unsupported message type"}), 200
-
-        except Exception as e:
-            logger.exception("Error handling webhook")
-            return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
 def send(message, recipient, phone_id):
     """Send message via WhatsApp API with validation"""
     if not all([message, recipient, phone_id]):
