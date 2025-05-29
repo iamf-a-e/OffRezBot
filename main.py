@@ -5,8 +5,6 @@ import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
 import base64
-import redis
-
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +19,6 @@ owner_phone = os.environ.get("OWNER_PHONE")
 GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 
 # ==================== Upstash Redis Config ====================
-redis_client = redis.from_url("UPSTASH_REDIS_REST_URL", decode_responses=True)
 REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
 REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 
@@ -108,12 +105,10 @@ def check_redis_connection():
 
 # ==================== Messaging Logic ====================
 
-def advance(sender, user_state, next_step, message):
-    if user_state.get("step") == next_step:
-        return None, user_state  # Don't change or resend
-    user_state['step'] = next_step
-    return message, user_state
-
+def advance(user_id, user_state, new_step, response=None):
+   user_state["step"] = new_step
+   save_user_state(user_id, user_state)
+   return response, user_state
     
 # Helper to check valid image extension
 def is_image_extension(filename):
@@ -183,21 +178,16 @@ def message_handler(sender, message, user_state, value):
         save_user_state(sender, user_state)
 
         # Move conversation forward - example prompt
-        if user_state.get("step") != "approve_manual":
-            reply_text, user_state = advance(
-                sender,
-                user_state,
-                "approve_manual",
-                "Thanks! Your image is received for manual approval.\n\n"
-                "Next, please provide the house details.\n"
-                "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-            )
-            send(reply_text, sender, value.get("metadata", {}).get("phone_number_id"))
-        else:
-            logger.info(f"User already at step {user_state.get('step')}, not repeating approval message.")
-        
+        reply_text, user_state = advance(
+            sender,
+            user_state,
+            "approve_manual",
+            "Thanks! Your image is received for manual approval.\n\n"
+            "Next, please provide the house details.\n"
+            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+        )
+        send(reply_text, sender, value.get("metadata", {}).get("phone_number_id"))
         return None, user_state
-
 
     # === Handle text messages ===
     if isinstance(message, str):
@@ -461,18 +451,6 @@ def handle_approve_manual(prompt, user_data, phone_id):
         return {"step": "approve_manual", "user": user.to_dict(), "sender": user_data['sender']}
 
 
-def update_user_state(sender, user_state):
-    # Convert user_state dict to JSON string and save it
-    redis.set(sender, json.dumps(user_state), ex=60)  # expire after 1 min
-
-def get_user_state(sender):
-    data = redis.get(sender)
-    if data:
-        return json.loads(data)
-    return {}  # default if no state stored yet
-
-
-
 
 # ==================== Flask Webhook Configuration ====================
 app = Flask(__name__)
@@ -530,13 +508,12 @@ def webhook():
                 logger.info(f"Image media ID: {media_id}")
                 logger.info(f"Image received from: {sender}")
             
-                # Get user state
                 user_state = get_user_state(sender)
                 if 'user' not in user_state:
                     user_state['user'] = User(sender).to_dict()
                 user_state['sender'] = sender
             
-                # Only send approval message and set step if not already at this step
+                # ONLY if not already at or beyond approval step
                 if user_state.get("step") != "approve_manual":
                     name = user_state['user'].get("name", "")
                     send(
@@ -550,32 +527,6 @@ def webhook():
                     update_user_state(sender, user_state)
                     return jsonify({"status": "ok"}), 200
             
-                # Process image if already in approve_manual step
-                media_info_resp = requests.get(
-                    f"{GRAPH_API_BASE}/{media_id}",
-                    headers={"Authorization": f"Bearer {wa_token}"}
-                )
-            
-                if media_info_resp.status_code != 200:
-                    logger.error(f"Failed to get media URL: {media_info_resp.text}")
-                    return jsonify({"status": "error", "message": "Failed to get media URL"}), 400
-            
-                media_url = media_info_resp.json().get("url")
-                if not media_url:
-                    logger.error("Media URL not found in response")
-                    return jsonify({"status": "error", "message": "No media URL"}), 400
-            
-                image_resp = requests.get(media_url, headers={"Authorization": f"Bearer {wa_token}"})
-                if image_resp.status_code != 200:
-                    logger.error(f"Failed to download image: {image_resp.text}")
-                    return jsonify({"status": "error", "message": "Failed to download image"}), 400
-            
-                image_base64 = base64.b64encode(image_resp.content).decode("utf-8")
-                user_state["image_url"] = image_base64
-                update_user_state(sender, user_state)
-            
-                # Don’t send the approval message again here
-                return jsonify({"status": "image processed"}), 200
 
 
             # Handle text messages
