@@ -655,25 +655,6 @@ def webhook():
         return jsonify({"status": "error", "message": str(e)}), 500
         
             
-            # Handle text messages
-            if message.get("type") == "text" and "text" in message:
-                text = message["text"]["body"].strip()
-                logger.info(f"Processing text message from {sender}: '{text}'")
-                reply, updated_state = message_handler(sender, text, user_state, value)
-                save_user_state(sender, updated_state)
-                send(reply, sender, value.get("metadata", {}).get("phone_number_id"))
-                return jsonify({"reply": reply}), 200
-
-            # Unhandled message types
-            logger.info("Received unsupported message type")
-            return jsonify({"status": "ignored", "message": "Unsupported message type"}), 200
-
-        except Exception as e:
-            logger.exception("Error handling webhook")
-            return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
 def send(message, recipient, phone_id):
     """Send message via WhatsApp API with validation"""
     if not all([message, recipient, phone_id]):
