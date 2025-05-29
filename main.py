@@ -307,20 +307,21 @@ def message_handler(sender, message, user_state, value):
         else:
             return "Please enter the number of students needing single rooms (number only).", user_state
 
-    # Confirm rent for single room
+   
+    # Step 5: confirm_single
     if step == "confirm_single":
         try:
             rent_single = float(msg)
             user_state["rent_single"] = rent_single
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "ask_2_sharing",
-                "How many students need 2-sharing rooms? (Enter number only)"
-            )
-            return reply, user_state
+            reply = "How many students need 2-sharing rooms? (Enter number only)"
+            user_state["step"] = "ask_2_sharing"
         except ValueError:
-            return "Please enter the rent as a number (e.g. 130).", user_state
+            reply = "Please enter the rent as a number (e.g. 130)."
+    
+        send(reply, sender, phone_id)
+        update_user_state(sender, user_state)
+        return jsonify({"status": "ok"}), 200
+
 
     # Ask number for 2-sharing rooms
     if step == "ask_2_sharing":
