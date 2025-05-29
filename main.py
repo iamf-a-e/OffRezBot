@@ -530,42 +530,6 @@ def webhook():
 
            
             
-            # Handle image messages
-            def handle_message(message, sender, phone_id):
-                # Initialize or get user state
-                user_state = get_user_state(sender) or {}
-                step = user_state.get("step", "start")
-            
-                # Check if message is image type
-                if message.get("type") == "image" and "image" in message:
-                    media_id = message["image"].get("id")
-                    if not media_id:
-                        logger.error("Image ID missing")
-                        return jsonify({"status": "error", "message": "Missing image ID"}), 400
-            
-                    logger.info("Image message received")
-                    logger.info(f"Image media ID: {media_id}")
-                    logger.info(f"Image received from: {sender}")
-            
-                    # Initialize user in state if not present
-                    if 'user' not in user_state:
-                        user_state['user'] = User(sender).to_dict()
-                    user_state['sender'] = sender
-            
-                    if user_state.get("step") != "approve_manual":
-                        name = user_state['user'].get("name", "")
-                        send(
-                            f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
-                            "Now let’s collect house details.\n\n"
-                            "Do you have accommodation for *boys*, *girls*, or *mixed*?",
-                            sender,
-                            phone_id
-                        )
-                        user_state["step"] = "approve_manual"
-                        update_user_state(sender, user_state)
-            
-                    return jsonify({"status": "ok"}), 200
-
                     
                     # For text messages, extract the text
                     
@@ -779,7 +743,45 @@ def webhook():
                         send(reply, sender, phone_id)
                         update_user_state(sender, user_state)
                         return jsonify({"status": "ok"}), 200
-            # Process image if already in approve_manual step
+           
+
+                        # Handle image messages
+                        def handle_message(message, sender, phone_id):
+                            # Initialize or get user state
+                            user_state = get_user_state(sender) or {}
+                            step = user_state.get("step", "start")
+                        
+                            # Check if message is image type
+                            if message.get("type") == "image" and "image" in message:
+                                media_id = message["image"].get("id")
+                                if not media_id:
+                                    logger.error("Image ID missing")
+                                    return jsonify({"status": "error", "message": "Missing image ID"}), 400
+                        
+                                logger.info("Image message received")
+                                logger.info(f"Image media ID: {media_id}")
+                                logger.info(f"Image received from: {sender}")
+                        
+                                # Initialize user in state if not present
+                                if 'user' not in user_state:
+                                    user_state['user'] = User(sender).to_dict()
+                                user_state['sender'] = sender
+                        
+                                if user_state.get("step") != "approve_manual":
+                                    name = user_state['user'].get("name", "")
+                                    send(
+                                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                                        "Now let’s collect house details.\n\n"
+                                        "Do you have accommodation for *boys*, *girls*, or *mixed*?",
+                                        sender,
+                                        phone_id
+                                    )
+                                    user_state["step"] = "approve_manual"
+                                    update_user_state(sender, user_state)
+                        
+                                return jsonify({"status": "ok"}), 200
+
+
 
             if media_info_resp.status_code != 200:
                 logger.error(f"Failed to get media URL: {media_info_resp.text}")
