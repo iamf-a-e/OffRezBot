@@ -110,14 +110,14 @@ def webhook():
             # Handle user response at the start step
             if step == "start":
                 if msg == "landlord":
-                    reply = "Great! Please upload an image of your property to begin."
+                    reply = "Great! Please send a screenshot of your WhatsApp username with your contact name for verification."
                     user_state["step"] = "awaiting_image"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
                 elif msg == "student":
-                    reply = "Welcome, student! We're still working on this section. Stay tuned."
+                    reply = "Welcome, student! Please download our app to secure your accommodation."
                     user_state["step"] = "student_pending"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
@@ -129,6 +129,12 @@ def webhook():
                 if not media_id:
                     return jsonify({"status": "error", "message": "Missing image ID"}), 400
 
+
+                msg = ""
+                if "text" in message:
+                    msg = message["text"]["body"].strip().lower()
+
+                
                 if step != "approve_manual" and step != "awaiting_image":
                     reply = (
                         f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
