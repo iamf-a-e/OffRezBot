@@ -104,6 +104,21 @@ def webhook():
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
+
+                if msg == "landlord":
+                    reply = "Great! Please upload an image of your property to begin."
+                    user_state["step"] = "awaiting_image"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
+            
+                elif msg == "student":
+                    reply = "Welcome, student! Please download our app to secure your accommodation."
+                    user_state["step"] = "student_pending"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200            
+
             # Handle image uploads
             if msg_type == "image":
                 media_id = message["image"].get("id")
