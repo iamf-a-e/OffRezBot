@@ -8,17 +8,15 @@ import google.generativeai as genai
 app = Flask(__name__)
 
 # Environment variables
-wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
-WA_TOKEN = wa_token
+WA_TOKEN = os.environ.get("WA_TOKEN")  # WhatsApp API Key
 phone_id = os.environ.get("PHONE_ID")
-genai.configure(api_key=os.environ.get("GEN_API"))    # Gemini API Key
+genai.configure(api_key=os.environ.get("GEN_API"))  # Gemini API Key
 owner_phone = os.environ.get("OWNER_PHONE")
-GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO)
 
-# Import Redis Upstash functions
+# Import your Redis Upstash functions here
 from redis_utils import get_user_state, update_user_state, save_user_state
 
 def send(message, recipient, phone_id):
@@ -27,7 +25,7 @@ def send(message, recipient, phone_id):
         logger.error("Missing parameters in send()")
         return False
 
-    url = f"https://graph.facebook.com/v13.0/{phone_id}/messages"
+    url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
     headers = {
         "Authorization": f"Bearer {WA_TOKEN}",
         "Content-Type": "application/json"
@@ -45,12 +43,14 @@ def send(message, recipient, phone_id):
         logger.info(f"Sent message to {recipient}: {message}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send message to {recipient}: {e}")
+        logger.error(f"Failed to send to {recipient}: {e}")
         return False
+
 
 @app.route("/", methods=["GET"])
 def index():
     return render_template("connected.html")
+
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
@@ -87,7 +87,7 @@ def webhook():
             # For text messages, get lowercase text body; else empty string
             msg = message.get("text", {}).get("body", "").strip().lower() if msg_type == "text" else ""
 
-            # Load or initialize user state
+            # Load or initialize user state from Redis Upstash
             user_state = get_user_state(sender) or {}
             if "user" not in user_state:
                 user_state["user"] = {"name": name}
@@ -107,22 +107,6 @@ def webhook():
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
-            # Handle user response at the start step
-            if step == "start":
-                if msg == "landlord":
-                    reply = "Please send a screenshot of your WhatsApp username with your contact name for verification."
-                    user_state["step"] = "awaiting_image"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-
-                elif msg == "student":
-                    reply = "Welcome, student! Please download our app to secure your accommodation."
-                    user_state["step"] = "student_pending"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-
             # Handle image uploads when at relevant step
             if msg_type == "image":
                 media_id = message["image"].get("id")
@@ -140,7 +124,6 @@ def webhook():
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
                 elif step == "awaiting_image":
-                    # Image received, move to approval step
                     reply = (
                         f"Thanks {name or 'there'} for the image.\n\n"
                         "Now let’s collect house details.\n\n"
@@ -153,7 +136,7 @@ def webhook():
 
             # Step-by-step state machine for your bot flow
             if step == "approve_manual":
-                if msg in ["boys", "Boys", "BOYS", "girls", "Girls", "GIRLS", "mixed", "Mixed", "MIXED"]:
+                if msg in ["boys", "girls", "mixed"]:
                     user_state["house_type"] = msg
                     reply = "Do you have a *cat*? Please reply *yes* or *no*."
                     user_state["step"] = "ask_cat_owner"
@@ -228,27 +211,22 @@ def webhook():
                     save_user_state(sender, user_state)  # Save on final confirmation
                 elif msg == "cancel":
                     reply = "Your listing was cancelled. Type 'Hi' to start over."
-                    user_state["step"] = "end"
-                    save_user_state(sender, user_state)
-                else:
-                    reply = "Please type *confirm* to publish your listing or *cancel* to abort."
-            elif step == "end":
-                if msg in ["hi", "hie", "hey"]:
-                    reply = "Welcome back! Are you a *student* or a *landlord*?"
                     user_state["step"] = "start"
                 else:
-                    reply = "Thank you for contacting us. Type 'Hi' to start again."
+                    reply = "Please type *confirm* to publish or *cancel* to abort."
+            elif step == "end":
+                reply = "Thank you for using our service! Type 'Hi' to start again."
             else:
-                reply = "Sorry, I did not understand that. Please try again."
+                reply = "Sorry, I did not understand that. Please type 'Hi' to start."
 
             update_user_state(sender, user_state)
             send(reply, sender, phone_id)
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
-            logger.exception("Unhandled error in webhook")
+            logger.error(f"Error processing message: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True)
