@@ -5,7 +5,7 @@ import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
 import base64
-from redis_utils import get_user_state, update_user_state, save_user_state
+import redis
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
