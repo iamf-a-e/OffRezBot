@@ -499,6 +499,32 @@ def webhook():
             elif msg_type == "image":
                 msg = "image"  # Use placeholder for flow consistency
 
+
+            step = user_state.get("step")
+            if not step:
+                # New user or fresh session, initialize step
+                user_state["step"] = "start"
+                update_user_state(sender, user_state)
+                step = "start"
+
+
+
+            msg = None
+            if "text" in message and "body" in message["text"]:
+                msg = message["text"]["body"].strip().lower()
+            
+            if not msg:
+                logger.info("No text message to process")
+                return jsonify({"status": "ok"}), 200
+            
+            user_state = get_user_state(sender) or {}
+            step = user_state.get("step")
+            
+            if not step:
+                user_state["step"] = "start"
+                update_user_state(sender, user_state)
+                step = "start"
+
             name = None
             if 'contacts' in value and value['contacts']:
                 contact = value['contacts'][0]
