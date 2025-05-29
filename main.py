@@ -22,6 +22,8 @@ GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
 REDIS_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
 REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 
+app = Flask(__name__)
+
 if not REDIS_URL or not REDIS_TOKEN:
     raise EnvironmentError("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set.")
 
