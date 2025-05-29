@@ -121,51 +121,50 @@ def webhook():
                     user_state["step"] = "student_pending"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200msg = ""
+
+                
+                if "text" in message:
+                    msg = message["text"]["body"].strip().lower()
+                
+                # Step-by-step state machine for your bot flow
+                if step == "approve_manual":
+                    if msg in ["boys", "girls", "mixed"]:
+                        user_state["house_type"] = msg
+                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
+                        user_state["step"] = "ask_cat_owner"
+                        update_user_state(sender, user_state)
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
+                    else:
+                        reply = "Please reply with *boys*, *girls*, or *mixed*."
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
+                
+                elif step == "awaiting_image":
+                    # Image received, move to approval step
+                    reply = (
+                        f"Thanks {name or 'there'} for the image.\n\n"
+                        "Now let’s collect house details.\n\n"
+                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                    )
+                    user_state["step"] = "approve_manual"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
+                
+                elif step != "approve_manual" and step != "awaiting_image":
+                    reply = (
+                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                        "Now let’s collect house details.\n\n"
+                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                    )
+                    user_state["step"] = "approve_manual"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
-            # Handle image uploads when at relevant step
-            if msg_type == "image":
-                media_id = message["image"].get("id")
-                if not media_id:
-                    return jsonify({"status": "error", "message": "Missing image ID"}), 400
 
-
-            msg = ""
-            if "text" in message:
-                msg = message["text"]["body"].strip().lower()
-
-            
-            if step != "approve_manual" and step != "awaiting_image":
-                reply = (
-                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
-                    "Now let’s collect house details.\n\n"
-                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                )
-                user_state["step"] = "approve_manual"
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-            elif step == "awaiting_image":
-                # Image received, move to approval step
-                reply = (
-                    f"Thanks {name or 'there'} for the image.\n\n"
-                    "Now let’s collect house details.\n\n"
-                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                )
-                user_state["step"] = "approve_manual"
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-
-            # Step-by-step state machine for your bot flow
-            if step == "approve_manual":
-                if msg in ["boys", "girls", "mixed"]:
-                    user_state["house_type"] = msg
-                    reply = "Do you have a *cat*? Please reply *yes* or *no*."
-                    user_state["step"] = "ask_cat_owner"
-                else:
-                    reply = "Please reply with *boys*, *girls*, or *mixed*."
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
                     user_state["has_cat"] = msg
