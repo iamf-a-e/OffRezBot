@@ -565,39 +565,41 @@ def webhook():
                         update_user_state(sender, user_state)
             
                     return jsonify({"status": "ok"}), 200
-            
+
+                    
                     # For text messages, extract the text
                     if message.get("type") == "text":
                         msg = message.get("text", {}).get("body", "").strip().lower()
-
-                            # Start of conversation or restart
-                            if step == "start":
-                                if "student" in msg:
-                                    reply, user_state = advance(
-                                        sender,
-                                        user_state,
-                                        "student_redirect",
-                                        "Please use the student app to check hostel availability: https://playstore.com/xyz"
-                                    )
-                                    return reply, user_state
-                                if "landlord" in msg:
-                                    reply, user_state = advance(
-                                        sender,
-                                        user_state,
-                                        "get_whatsapp_verification",
-                                        "OK. Please send a screenshot of your WhatsApp username with your contact name for verification."
-                                    )
-                                    return reply, user_state
-                        
-                                # If user sends unexpected reply here
+                    
+                        # Start of conversation or restart
+                        if step == "start":
+                            if "student" in msg:
                                 reply, user_state = advance(
                                     sender,
                                     user_state,
-                                    "start",
-                                    "Hello! Are you a *student* or a *landlord*? Please reply with one."
+                                    "student_redirect",
+                                    "Please use the student app to check hostel availability: https://playstore.com/xyz"
                                 )
                                 return reply, user_state
-                        
+                    
+                            if "landlord" in msg:
+                                reply, user_state = advance(
+                                    sender,
+                                    user_state,
+                                    "get_whatsapp_verification",
+                                    "OK. Please send a screenshot of your WhatsApp username with your contact name for verification."
+                                )
+                                return reply, user_state
+                    
+                            # If user sends unexpected reply here
+                            reply, user_state = advance(
+                                sender,
+                                user_state,
+                                "start",
+                                "Hello! Are you a *student* or a *landlord*? Please reply with one."
+                            )
+                            return reply, user_state
+
                             # WhatsApp verification for landlord (waiting for image screenshot)
                             if step == "get_whatsapp_verification":
                                 # If user sent image, that is handled above.
