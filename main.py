@@ -115,309 +115,6 @@ def advance(sender, user_state, next_step, message):
     return message, user_state
 
     
-# Helper to check valid image extension
-def is_image_extension(filename):
-    allowed_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
-    return os.path.splitext(fname)[1].lower() in allowed_exts
-
-
-def message_handler(sender, message, user_state, value):
-    user_id = user_state.get("user_id")  # Ensure user_id is present
-
-    if not user_state:
-        user_state = {"step": "start"}
-
-    step = user_state.get("step", "start")
-
-    # === Handle incoming image messages ===
-    if isinstance(message, dict) and message.get("type") == "image":
-        media_id = message["image"].get("id")
-        if not media_id:
-            send_message(sender, "Sorry, I couldn't get your image. Please try again.")
-            return None, user_state
-
-        # Get media URL from WhatsApp Graph API
-        media_resp = requests.get(
-            url = f"{GRAPH_API_BASE}/{media_id}",
-            headers={"Authorization": f"Bearer {WA_TOKEN}"}
-        )
-        if media_resp.status_code != 200:
-            send_message(sender, "Failed to get your image info. Please try again.")
-            return None, user_state
-
-        media_url = media_resp.json().get("url")
-        if not media_url:
-            send_message(sender, "Failed to get your image URL. Please try again.")
-            return None, user_state
-
-        # Download image bytes from media URL
-        img_resp = requests.get(media_url, headers={"Authorization": f"Bearer {WA_TOKEN}"})
-        if img_resp.status_code != 200:
-            send_message(sender, "Failed to download your image. Please try again.")
-            return None, user_state
-
-        # Determine file extension from Content-Type
-        content_type = img_resp.headers.get("Content-Type", "").lower()
-        mime_map = {
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/gif": ".gif",
-            "image/bmp": ".bmp",
-            "image/tiff": ".tiff",
-            "image/webp": ".webp",
-        }
-        extension = mime_map.get(content_type, ".jpg")  # default to .jpg
-
-        filename = f"{media_id}{extension}"
-
-        if not is_image_extension(filename):
-            send_message(sender, "Please upload a valid image file (jpg, png, gif, bmp, tiff, webp).")
-            return None, user_state
-
-        # Convert image bytes to base64 string
-        image_base64 = base64.b64encode(img_resp.content).decode("utf-8")
-
-        # Save image info in user_state
-        user_state["image_base64"] = image_base64
-        user_state["image_filename"] = filename
-        save_user_state(sender, user_state)
-
-        # Move conversation forward - example prompt
-        if user_state.get("step") != "approve_manual":
-            reply_text, user_state = advance(
-                sender,
-                user_state,
-                "approve_manual",
-                "Thanks! Your image is received for manual approval.\n\n"
-                "Next, please provide the house details.\n"
-                "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-            )
-            send(reply_text, sender, value.get("metadata", {}).get("phone_number_id"))
-        else:
-            logger.info(f"User already at step {user_state.get('step')}, not repeating approval message.")
-        
-        return None, user_state
-
-
-    # === Handle text messages ===
-    if isinstance(message, str):
-        msg = message.get("text", {}).get("body", "").strip().lower()
-    else:
-        # Unexpected non-text, non-image message
-        send_message(sender, "Sorry, I can only process text and images at the moment.")
-        return None, user_state
-
-    # === Conversation flow logic based on user state step ===
-
-    # Start of conversation or restart
-    if step == "start":
-        if "student" in msg:
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "student_redirect",
-                "Please use the student app to check hostel availability: https://playstore.com/xyz"
-            )
-            return reply, user_state
-        if "landlord" in msg:
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "get_whatsapp_verification",
-                "OK. Please send a screenshot of your WhatsApp username with your contact name for verification."
-            )
-            return reply, user_state
-
-        # If user sends unexpected reply here
-        reply, user_state = advance(
-            sender,
-            user_state,
-            "start",
-            "Hello! Are you a *student* or a *landlord*? Please reply with one."
-        )
-        return reply, user_state
-
-    # WhatsApp verification for landlord (waiting for image screenshot)
-    if step == "get_whatsapp_verification":
-        # If user sent image, that is handled above.
-        # Otherwise prompt user again
-        reply = "Please send a screenshot of your WhatsApp username with your contact name for verification."
-        return reply, user_state
-
-    # After image approved (example flow)
-    if step == "approve_manual":
-        if msg in ["boys", "girls", "mixed"]:
-            user_state["house_type"] = msg
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "ask_cat_owner",
-                "Do you have a *cat*? Please reply *yes* or *no*."
-            )
-            return reply, user_state
-        else:
-            return "Please reply with *boys*, *girls*, or *mixed*.", user_state
-
-    # Ask if user has a cat
-    if step == "ask_cat_owner":
-        if msg in ["yes", "no"]:
-            user_state["has_cat"] = msg
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "ask_availability",
-                "Do you have a vacancy? Reply *yes* or *no*."
-            )
-            return reply, user_state
-        else:
-            return "Do you have a cat? Please reply *yes* or *no*.", user_state
-
-    # Ask if user has vacancy
-    if step == "ask_availability":
-        if msg == "no":
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "end",
-                "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
-            )
-            return reply, user_state
-        if msg == "yes":
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "ask_room_type",
-                "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
-            )
-            return reply, user_state
-        else:
-            return "Do you have a vacancy? Please reply *yes* or *no*.", user_state
-
-    # Ask number of students for single rooms
-    if step == "ask_room_type":
-        if msg.isdigit():
-            user_state["room_single"] = int(msg)
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "confirm_single",
-                "Please confirm your rent for a single room (e.g. 130)."
-            )
-            return reply, user_state
-        else:
-            return "Please enter the number of students needing single rooms (number only).", user_state
-
-   
-    # Step 5: confirm_single
-    if step == "confirm_single":
-        try:
-            rent_single = float(msg)
-            user_state["rent_single"] = rent_single
-            reply = "How many students need 2-sharing rooms? (Enter number only)"
-            user_state["step"] = "ask_2_sharing"
-        except ValueError:
-            reply = "Please enter the rent as a number (e.g. 130)."
-    
-        send(reply, sender, phone_id)
-        update_user_state(sender, user_state)
-        return jsonify({"status": "ok"}), 200
-
-
-    # Ask number for 2-sharing rooms
-    if step == "ask_2_sharing":
-        if msg.isdigit():
-            user_state["room_2_sharing"] = int(msg)
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "confirm_2_sharing",
-                "Please confirm your rent for 2-sharing rooms (e.g. 80)."
-            )
-            return reply, user_state
-        else:
-            return "Please enter number of students needing 2-sharing rooms (number only).", user_state
-
-    # Confirm rent for 2-sharing rooms
-    if step == "confirm_2_sharing":
-        try:
-            rent_2_sharing = float(msg)
-            user_state["rent_2_sharing"] = rent_2_sharing
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "ask_3_sharing",
-                "How many students need 3-sharing rooms? (Enter number only)"
-            )
-            return reply, user_state
-        except ValueError:
-            return "Please enter the rent as a number (e.g. 80).", user_state
-
-    # Ask number for 3-sharing rooms
-    if step == "ask_3_sharing":
-        if msg.isdigit():
-            user_state["room_3_sharing"] = int(msg)
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "confirm_3_sharing",
-                "Please confirm your rent for 3-sharing rooms (e.g. 60)."
-            )
-            return reply, user_state
-        else:
-            return "Please enter number of students needing 3-sharing rooms (number only).", user_state
-
-    # Confirm rent for 3-sharing rooms
-    if step == "confirm_3_sharing":
-        try:
-            rent_3_sharing = float(msg)
-            user_state["rent_3_sharing"] = rent_3_sharing
-            reply, user_state = advance(
-                sender,
-                user_state,
-                "ask_student_age",
-                "What age group are the students? (e.g. 18-22)"
-            )
-            return reply, user_state
-        except ValueError:
-            return "Please enter the rent as a number (e.g. 60).", user_state
-
-    # Ask for student age group
-    if step == "ask_student_age":
-        user_state["student_age"] = message.strip()
-        reply, user_state = advance(
-            sender,
-            user_state,
-            "confirm_listing",
-            "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
-        )
-        return reply, user_state
-
-    # Confirm listing submission
-    if step == "confirm_listing":
-        if msg == "confirm":
-            user_state["step"] = "end"
-            save_user_state(sender, user_state)
-            return ("Thank you! Your listing will be published soon. Expect calls from students if you have vacancies."), user_state
-        elif msg == "cancel":
-            user_state["step"] = "end"
-            save_user_state(sender, user_state)
-            return ("Your listing was cancelled. Type 'Hi' to start over."), user_state
-        else:
-            return "Please type *confirm* to publish your listing or *cancel* to abort.", user_state
-
-    # End state - user can restart conversation by typing 'hi'
-    if step == "end":
-        if msg == "hi":
-            user_state["step"] = "start"
-            save_user_state(sender, user_state)
-            return ("Hello! Are you a *student* or a *landlord*? Please reply with one."), user_state
-        else:
-            return ("Thank you for contacting us. Type 'Hi' if you want to start again."), user_state
-
-    # Default fallback for any unhandled step
-    return ("Sorry, I did not understand that. Please try again."), user_state
-
-
 class User:
     def __init__(self, phone_number):
         self.phone_number = phone_number
@@ -473,59 +170,8 @@ class User:
         return {}  # default if no state stored yet
     
     
-    
 
-# ==================== Flask Webhook Configuration ====================
-app = Flask(__name__)
-
-@app.route("/", methods=["GET"])
-def index():
-    return render_template("connected.html")
-@app.route("/webhook", methods=["GET", "POST"])
-def webhook():
-    if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == "BOT":
-            logger.info("Webhook verification successful.")
-            return challenge, 200
-        logger.warning("Webhook verification failed.")
-        return "Failed", 403
-
-    elif request.method == "POST":
-        try:
-            data = request.get_json()
-            logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
-
-            entry = data.get("entry", [])[0]
-            changes = entry.get("changes", [])[0]
-            value = changes.get("value", {})
-            messages = value.get("messages", [])
-            if not messages:
-                logger.info("No valid messages in payload")
-                return jsonify({"status": "ok", "message": "No messages"}), 200
-
-            message = messages[0]
-            sender = message.get("from")
-            if not sender or not validate_whatsapp_number(sender):
-                logger.error(f"Invalid sender ID: {sender}")
-                return jsonify({"status": "error", "message": "Invalid sender"}), 400
-
-            name = None
-            if 'contacts' in value and value['contacts']:
-                contact = value['contacts'][0]
-                name = contact.get('profile', {}).get('name')
-
-            user_state = get_user_state(sender) or {}
-            user_state["user_id"] = sender
-
-            return jsonify({"status": "ok"}), 200
-
-        except Exception as e:
-            logger.exception("Error handling webhook POST")
-            return jsonify({"status": "error", "message": str(e)}), 500
-
+# ==================== Message Execution ====================
 
 # For text messages, extract the text
 def handle_text_message(message, sender, user_state):
@@ -792,6 +438,59 @@ def send(message, recipient, phone_id):
     except Exception as e:
         logger.error(f"Error sending message to {recipient}: {str(e)}")
         return False
+
+
+
+# ==================== Flask Webhook Configuration ====================
+app = Flask(__name__)
+
+@app.route("/", methods=["GET"])
+def index():
+    return render_template("connected.html")
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == "BOT":
+            logger.info("Webhook verification successful.")
+            return challenge, 200
+        logger.warning("Webhook verification failed.")
+        return "Failed", 403
+
+    elif request.method == "POST":
+        try:
+            data = request.get_json()
+            logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
+
+            entry = data.get("entry", [])[0]
+            changes = entry.get("changes", [])[0]
+            value = changes.get("value", {})
+            messages = value.get("messages", [])
+            if not messages:
+                logger.info("No valid messages in payload")
+                return jsonify({"status": "ok", "message": "No messages"}), 200
+
+            message = messages[0]
+            sender = message.get("from")
+            if not sender or not validate_whatsapp_number(sender):
+                logger.error(f"Invalid sender ID: {sender}")
+                return jsonify({"status": "error", "message": "Invalid sender"}), 400
+
+            name = None
+            if 'contacts' in value and value['contacts']:
+                contact = value['contacts'][0]
+                name = contact.get('profile', {}).get('name')
+
+            user_state = get_user_state(sender) or {}
+            user_state["user_id"] = sender
+
+            return jsonify({"status": "ok"}), 200
+
+        except Exception as e:
+            logger.exception("Error handling webhook POST")
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # ==================== Main Execution ====================
