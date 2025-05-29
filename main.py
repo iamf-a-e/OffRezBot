@@ -453,6 +453,12 @@ def handle_approve_manual(prompt, user_data, phone_id):
 
 
 # ==================== Flask Webhook Configuration ====================
+
+@app.route("/", methods=["GET"])
+def index():
+    return render_template("connected.html")
+
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
