@@ -603,9 +603,9 @@ def webhook():
             )
             
                 
-                        send(reply, sender, phone_id)
-                        update_user_state(sender, user_state)
-                        return jsonify({"status": "ok"}), 200
+            send(reply, sender, phone_id)
+            update_user_state(sender, user_state)
+            return jsonify({"status": "ok"}), 200
                 
                     # Step 4: ask_room_type
                     if step == "ask_room_type":
