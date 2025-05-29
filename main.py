@@ -444,36 +444,36 @@ class User:
         user.offer_data = data.get("offer_data", {})
         return user
 
-
-def handle_approve_manual(prompt, user_data, phone_id):
-    user = User.from_dict(user_data.get('user', {}))
-    prompt = prompt.lower().strip()
     
-    if prompt in ["boys", "girls", "mixed"]:
-        user.booking_data["gender"] = prompt
-        update_user_state(user_data['sender'], {
-            "step": "collect_city",
-            "user": user.to_dict()
-        })
-        send("Which city is your property located in?", user_data['sender'], phone_id)
-        return {"step": "collect_city", "user": user.to_dict(), "sender": user_data['sender']}
-    else:
-        send("Please reply with 'boys', 'girls', or 'mixed'.", user_data['sender'], phone_id)
-        return {"step": "approve_manual", "user": user.to_dict(), "sender": user_data['sender']}
-
-
-def update_user_state(sender, user_state):
-    # Convert user_state dict to JSON string and save it
-    redis_client.set(sender, json.dumps(user_state), ex=60)  # expire after 1 min
-
-def get_user_state(sender):
-    data = redis_client.get(sender)
-    if data:
-        return json.loads(data)
-    return {}  # default if no state stored yet
-
-
-
+    def handle_approve_manual(prompt, user_data, phone_id):
+        user = User.from_dict(user_data.get('user', {}))
+        prompt = prompt.lower().strip()
+        
+        if prompt in ["boys", "girls", "mixed"]:
+            user.booking_data["gender"] = prompt
+            update_user_state(user_data['sender'], {
+                "step": "collect_city",
+                "user": user.to_dict()
+            })
+            send("Which city is your property located in?", user_data['sender'], phone_id)
+            return {"step": "collect_city", "user": user.to_dict(), "sender": user_data['sender']}
+        else:
+            send("Please reply with 'boys', 'girls', or 'mixed'.", user_data['sender'], phone_id)
+            return {"step": "approve_manual", "user": user.to_dict(), "sender": user_data['sender']}
+    
+    
+    def update_user_state(sender, user_state):
+        # Convert user_state dict to JSON string and save it
+        redis_client.set(sender, json.dumps(user_state), ex=60)  # expire after 1 min
+    
+    def get_user_state(sender):
+        data = redis_client.get(sender)
+        if data:
+            return json.loads(data)
+        return {}  # default if no state stored yet
+    
+    
+    
 
 # ==================== Flask Webhook Configuration ====================
 app = Flask(__name__)
