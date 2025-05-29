@@ -523,14 +523,14 @@ def webhook():
                         sender,
                         phone_id
                     )
-                    user_state["step"] = "approve_manual"
+                    user_state["step"] = "manual"
                     update_user_state(sender, user_state)
                     return jsonify({"status": "ok"}), 200
 
             
 
                  # Step 1: approve_manual
-                if step == "approve_manual":
+                if step == "manual":
                     if msg in ["boys", "girls", "mixed"]:
                         user_state["house_type"] = msg
                         reply = "Do you have a *cat*? Please reply *yes* or *no*."
