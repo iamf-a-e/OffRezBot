@@ -525,7 +525,7 @@ def webhook():
                     )
                     user_state["step"] = "approve_manual"
                     update_user_state(sender, user_state)
-                    return jsonify({"status": "ok"}), 200
+                return jsonify({"status": "ok"}), 200
             
 
 
