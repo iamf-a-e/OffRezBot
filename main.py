@@ -5,6 +5,7 @@ import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
 import base64
+from redis_utils import get_user_state, update_user_state, save_user_state
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -460,7 +461,6 @@ def handle_approve_manual(prompt, user_data, phone_id):
 def index():
     return render_template("connected.html")
 
-
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -468,10 +468,8 @@ def webhook():
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
         if mode == "subscribe" and token == "BOT":
-            logger.info("Webhook verification successful.")
             return challenge, 200
-        logger.warning("Webhook verification failed.")
-        return "Failed", 403
+        return "Verification failed", 403
 
     elif request.method == "POST":
         data = request.get_json()
@@ -482,73 +480,57 @@ def webhook():
             changes = entry.get("changes", [])[0]
             value = changes.get("value", {})
             messages = value.get("messages", [])
+
             if not messages:
-                logger.info("No valid messages in payload")
                 return jsonify({"status": "ok", "message": "No messages"}), 200
 
             message = messages[0]
             sender = message.get("from")
-            if not sender or not validate_whatsapp_number(sender):
-                logger.error(f"Invalid sender ID: {sender}")
-                return jsonify({"status": "error", "message": "Invalid sender"}), 400
+            if not sender:
+                return jsonify({"status": "error", "message": "No sender"}), 400
 
+            name = value.get('contacts', [{}])[0].get('profile', {}).get('name', '')
+            msg = message.get("text", {}).get("body", "").strip().lower()
             msg_type = message.get("type")
-            msg = ""
-            if msg_type == "text":
-                msg = message["text"]["body"].strip().lower()
-            elif msg_type == "image":
-                msg = "image"  # Use placeholder for flow consistency
 
+            # Load or initialize user state
+            user_state = get_user_state(sender) or {}
+            if 'user' not in user_state:
+                user_state['user'] = {"name": name}
+            user_state["user_id"] = sender
 
+            # STEP INITIALIZATION
             step = user_state.get("step")
             if not step:
-                # New user or fresh session, initialize step
                 user_state["step"] = "start"
-                update_user_state(sender, user_state)
                 step = "start"
 
-
-
-            msg = None
-            if "text" in message and "body" in message["text"]:
-                msg = message["text"]["body"].strip().lower()
-            
-            if not msg:
-                logger.info("No text message to process")
-                return jsonify({"status": "ok"}), 200
-            
-            user_state = get_user_state(sender) or {}
-            step = user_state.get("step")
-            
-            if not step:
+            # GREETING HANDLER
+            if msg in ["hi", "hie", "hey"]:
+                reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
                 user_state["step"] = "start"
                 update_user_state(sender, user_state)
-                step = "start"
-
-            name = None
-            if 'contacts' in value and value['contacts']:
-                contact = value['contacts'][0]
-                name = contact.get('profile', {}).get('name')
-
-            user_state = get_user_state(sender) or {}
-            user_state.setdefault("user_id", sender)
-            user_state.setdefault("user", User(sender).to_dict())
-            step = user_state.get("step", "")
-
-            # Step 0: On image upload – only once
-            if msg_type == "image" and step != "approve_manual":
-                send(
-                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
-                    "Now let’s collect house details.\n\n"
-                    "Do you have accommodation for *boys*, *girls*, or *mixed*?",
-                    sender, phone_id
-                )
-                user_state["step"] = "approve_manual"
-                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
-            # --- STEP FLOW ---
+            # IMAGE HANDLING
+            if msg_type == "image":
+                media_id = message["image"].get("id")
+                if not media_id:
+                    return jsonify({"status": "error", "message": "Missing image ID"}), 400
 
+                if user_state.get("step") != "approve_manual":
+                    send(
+                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                        "Now let’s collect house details.\n\n"
+                        "Do you have accommodation for *boys*, *girls*, or *mixed*?",
+                        sender, phone_id
+                    )
+                    user_state["step"] = "approve_manual"
+                    update_user_state(sender, user_state)
+                    return jsonify({"status": "ok"}), 200
+
+            # STEP HANDLING
             if step == "approve_manual":
                 if msg in ["boys", "girls", "mixed"]:
                     user_state["house_type"] = msg
@@ -556,7 +538,6 @@ def webhook():
                     user_state["step"] = "ask_cat_owner"
                 else:
                     reply = "Please reply with *boys*, *girls*, or *mixed*."
-
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
                     user_state["has_cat"] = msg
@@ -564,7 +545,6 @@ def webhook():
                     user_state["step"] = "ask_availability"
                 else:
                     reply = "Do you have a cat? Please reply *yes* or *no*."
-
             elif step == "ask_availability":
                 if msg == "no":
                     reply = "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
@@ -574,7 +554,6 @@ def webhook():
                     user_state["step"] = "ask_room_type"
                 else:
                     reply = "Do you have a vacancy? Please reply *yes* or *no*."
-
             elif step == "ask_room_type":
                 if msg.isdigit():
                     user_state["room_single"] = int(msg)
@@ -582,7 +561,6 @@ def webhook():
                     user_state["step"] = "confirm_single"
                 else:
                     reply = "Please enter the number of students needing single rooms (number only)."
-
             elif step == "confirm_single":
                 try:
                     user_state["rent_single"] = float(msg)
@@ -590,7 +568,6 @@ def webhook():
                     user_state["step"] = "ask_2_sharing"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 130)."
-
             elif step == "ask_2_sharing":
                 if msg.isdigit():
                     user_state["room_2_sharing"] = int(msg)
@@ -598,7 +575,6 @@ def webhook():
                     user_state["step"] = "confirm_2_sharing"
                 else:
                     reply = "Please enter number of students needing 2-sharing rooms (number only)."
-
             elif step == "confirm_2_sharing":
                 try:
                     user_state["rent_2_sharing"] = float(msg)
@@ -606,7 +582,6 @@ def webhook():
                     user_state["step"] = "ask_3_sharing"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 80)."
-
             elif step == "ask_3_sharing":
                 if msg.isdigit():
                     user_state["room_3_sharing"] = int(msg)
@@ -614,7 +589,6 @@ def webhook():
                     user_state["step"] = "confirm_3_sharing"
                 else:
                     reply = "Please enter number of students needing 3-sharing rooms (number only)."
-
             elif step == "confirm_3_sharing":
                 try:
                     user_state["rent_3_sharing"] = float(msg)
@@ -622,15 +596,13 @@ def webhook():
                     user_state["step"] = "ask_student_age"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 60)."
-
             elif step == "ask_student_age":
                 user_state["student_age"] = msg
-                reply = "Thank you. Please confirm your listing by typing *confirm* or *cancel*."
+                reply = "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
                 user_state["step"] = "confirm_listing"
-
             elif step == "confirm_listing":
                 if msg == "confirm":
-                    reply = "Thank you! Your listing will be published soon. Expect calls from students if you have vacancies."
+                    reply = "Thank you! Your listing will be published soon."
                     user_state["step"] = "end"
                     save_user_state(sender, user_state)
                 elif msg == "cancel":
@@ -638,29 +610,23 @@ def webhook():
                     user_state["step"] = "end"
                     save_user_state(sender, user_state)
                 else:
-                    reply = "Please type *confirm* to publish or *cancel* to abort."
-
+                    reply = "Please type *confirm* to publish your listing or *cancel* to abort."
             elif step == "end":
                 if msg in ["hi", "hie", "hey"]:
-                    reply = "Hello! Are you a *student* or a *landlord*?"
+                    reply = "Welcome back! Are you a *student* or a *landlord*?"
                     user_state["step"] = "start"
-                    save_user_state(sender, user_state)
                 else:
-                    reply = "Thank you for contacting us. Type 'Hi' if you want to start again."
-
+                    reply = "Thank you for contacting us. Type 'Hi' to start again."
             else:
                 reply = "Sorry, I did not understand that. Please try again."
 
-            # Final response
-            send(reply, sender, phone_id)
             update_user_state(sender, user_state)
+            send(reply, sender, phone_id)
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
             logger.exception("Unhandled error in webhook")
             return jsonify({"status": "error", "message": str(e)}), 500
-    
-
 
             # Handle text messages
             if message.get("type") == "text" and "text" in message:
