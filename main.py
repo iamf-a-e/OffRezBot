@@ -494,9 +494,10 @@ def webhook():
         return "Failed", 403
 
     elif request.method == "POST":
-        data = request.get_json()
-        logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
         try:
+            data = request.get_json()
+            logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
+
             entry = data.get("entry", [])[0]
             changes = entry.get("changes", [])[0]
             value = changes.get("value", {})
@@ -519,18 +520,12 @@ def webhook():
             user_state = get_user_state(sender) or {}
             user_state["user_id"] = sender
 
-          
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
             logger.exception("Error handling webhook POST")
             return jsonify({"status": "error", "message": str(e)}), 500
 
-        # Continue your logic here...
-
-    except Exception as e:
-        logger.exception("Error handling incoming POST webhook")
-        return jsonify({"status": "error", "message": str(e)}), 500
 
 
            
