@@ -121,9 +121,10 @@ def webhook():
                     user_state["step"] = "student_pending"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200msg = ""
-
+                    return jsonify({"status": "ok"}), 200
+                    
                 
+                msg = ""            
                 if "text" in message:
                     msg = message["text"]["body"].strip().lower()
                 
