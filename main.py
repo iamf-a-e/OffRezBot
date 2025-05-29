@@ -155,7 +155,7 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
 
 
-                elif step != "approve_manual" and step != "awaiting_image":
+                elif step != "approve_manual":
                     reply = (
                         f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
                         "Now let’s collect house details.\n\n"
