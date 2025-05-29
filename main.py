@@ -94,10 +94,12 @@ def webhook():
             user_state["user_id"] = sender
 
             # Initialize step if not present
-            step = user_state.get("step", "start")
-            user_state["step"] = step  # ensure step is set
+            step = user_state.get("step")
+            if not step:
+                user_state["step"] = "start"
+                step = "start"
 
-            # Handle greetings anywhere
+            # Handle greetings
             if msg in ["hi", "hie", "hey"]:
                 reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
                 user_state["step"] = "start"
@@ -105,7 +107,7 @@ def webhook():
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
-            # START step: choose landlord or student
+            # Handle user response at the start step
             if step == "start":
                 if msg == "landlord":
                     reply = "Great! Please send a screenshot of your WhatsApp username with your contact name for verification."
@@ -120,15 +122,28 @@ def webhook():
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
-
-                else:
-                    reply = "Please reply with *student* or *landlord*."
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-
-            # AWAITING IMAGE step - landlord sends image for verification
-            elif step == "awaiting_image":
-                if msg_type == "image":
+                    
+                
+                msg = ""            
+                if "text" in message:
+                    msg = message["text"]["body"].strip().lower()
+                
+                # Step-by-step state machine for your bot flow
+                if step == "approve_manual":
+                    if msg in ["boys", "girls", "mixed"]:
+                        user_state["house_type"] = msg
+                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
+                        user_state["step"] = "ask_cat_owner"
+                        update_user_state(sender, user_state)
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
+                    else:
+                        reply = "Please reply with *boys*, *girls*, or *mixed*."
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
+                
+                elif step == "awaiting_image":
+                    # Image received, move to approval step
                     reply = (
                         f"Thanks {name or 'there'} for the image.\n\n"
                         "Now let’s collect house details.\n\n"
@@ -138,26 +153,19 @@ def webhook():
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
-                else:
-                    reply = "Please send a screenshot of your WhatsApp username with your contact name for verification."
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
 
-            # APPROVE MANUAL step - ask house type
-            elif step == "approve_manual":
-                if msg in ["boys", "girls", "mixed"]:
-                    user_state["house_type"] = msg
-                    reply = "Do you have a *cat*? Please reply *yes* or *no*."
-                    user_state["step"] = "ask_cat_owner"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-                else:
-                    reply = "Please reply with *boys*, *girls*, or *mixed*."
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
 
-            # ASK CAT OWNER step
+            elif step != "approve_manual" and step != "awaiting_image":
+                reply = (
+                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                    "Now let’s collect house details.\n\n"
+                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                )
+                user_state["step"] = "approve_manual"
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
+
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
                     user_state["has_cat"] = msg
@@ -165,11 +173,6 @@ def webhook():
                     user_state["step"] = "ask_availability"
                 else:
                     reply = "Do you have a cat? Please reply *yes* or *no*."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # ASK AVAILABILITY step
             elif step == "ask_availability":
                 if msg == "no":
                     reply = "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
@@ -179,11 +182,6 @@ def webhook():
                     user_state["step"] = "ask_room_type"
                 else:
                     reply = "Do you have a vacancy? Please reply *yes* or *no*."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # ASK ROOM TYPE step (single rooms)
             elif step == "ask_room_type":
                 if msg.isdigit():
                     user_state["room_single"] = int(msg)
@@ -191,11 +189,6 @@ def webhook():
                     user_state["step"] = "confirm_single"
                 else:
                     reply = "Please enter the number of students needing single rooms (number only)."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # CONFIRM SINGLE step (rent for single rooms)
             elif step == "confirm_single":
                 try:
                     user_state["rent_single"] = float(msg)
@@ -203,11 +196,6 @@ def webhook():
                     user_state["step"] = "ask_2_sharing"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 130)."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # ASK 2-SHARING step
             elif step == "ask_2_sharing":
                 if msg.isdigit():
                     user_state["room_2_sharing"] = int(msg)
@@ -215,11 +203,6 @@ def webhook():
                     user_state["step"] = "confirm_2_sharing"
                 else:
                     reply = "Please enter number of students needing 2-sharing rooms (number only)."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # CONFIRM 2-SHARING step
             elif step == "confirm_2_sharing":
                 try:
                     user_state["rent_2_sharing"] = float(msg)
@@ -227,11 +210,6 @@ def webhook():
                     user_state["step"] = "ask_3_sharing"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 80)."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # ASK 3-SHARING step
             elif step == "ask_3_sharing":
                 if msg.isdigit():
                     user_state["room_3_sharing"] = int(msg)
@@ -239,51 +217,45 @@ def webhook():
                     user_state["step"] = "confirm_3_sharing"
                 else:
                     reply = "Please enter number of students needing 3-sharing rooms (number only)."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # CONFIRM 3-SHARING step
             elif step == "confirm_3_sharing":
                 try:
                     user_state["rent_3_sharing"] = float(msg)
-                    reply = (
-                        "Thank you! Your accommodation details are recorded.\n\n"
-                        "Type 'Yes' to *list* this accommodation now, or 'No' to *cancel*."
-                    )
-                    user_state["step"] = "confirm_listing"
+                    reply = "What age group are the students? (e.g. 18-22)"
+                    user_state["step"] = "ask_student_age"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 60)."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # CONFIRM LISTING step
+            elif step == "ask_student_age":
+                user_state["student_age"] = msg
+                reply = "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
+                user_state["step"] = "confirm_listing"
             elif step == "confirm_listing":
-                if msg == "yes":
-                    # Here you can add logic to save listing permanently
-                    reply = "Your accommodation has been listed. Thank you!"
+                if msg == "confirm":
+                    reply = "Thank you! Your listing will be published soon."
                     user_state["step"] = "end"
-                elif msg == "no":
-                    reply = "Your listing has been cancelled. If you want to start over, type 'Hi'."
+                    save_user_state(sender, user_state)  # Save on final confirmation
+                elif msg == "cancel":
+                    reply = "Your listing was cancelled. Type 'Hi' to start over."
                     user_state["step"] = "end"
+                    save_user_state(sender, user_state)
                 else:
-                    reply = "Please reply with *Yes* or *No*."
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            # END or unknown steps
+                    reply = "Please type *confirm* to publish your listing or *cancel* to abort."
+            elif step == "end":
+                if msg in ["hi", "hie", "hey"]:
+                    reply = "Welcome back! Are you a *student* or a *landlord*?"
+                    user_state["step"] = "start"
+                else:
+                    reply = "Thank you for contacting us. Type 'Hi' to start again."
             else:
-                reply = "Thank you for using our service. If you want to start again, please say 'Hi'."
-                user_state["step"] = "start"
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
+                reply = "Sorry, I did not understand that. Please try again."
+
+            update_user_state(sender, user_state)
+            send(reply, sender, phone_id)
+            return jsonify({"status": "ok"}), 200
 
         except Exception as e:
-            logger.error(f"Exception in webhook processing: {e}")
+            logger.exception("Unhandled error in webhook")
             return jsonify({"status": "error", "message": str(e)}), 500
 
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5000)
