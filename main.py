@@ -5,9 +5,14 @@ import requests
 
 app = Flask(__name__)
 
-# Configure your WhatsApp token here
-WA_TOKEN = "your_whatsapp_token_here"
-phone_id = "your_phone_number_id_here"
+# Environment variables
+wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
+WA_TOKEN = wa_token
+phone_id = os.environ.get("PHONE_ID")
+genai.configure(api_key=os.environ.get("GEN_API"))    # Gemini API Key
+owner_phone = os.environ.get("OWNER_PHONE")
+GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
+
 
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO)
