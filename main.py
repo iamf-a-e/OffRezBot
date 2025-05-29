@@ -568,10 +568,12 @@ def webhook():
 
                     
                     # For text messages, extract the text
-                    step = user_state.get("step", "start")
+                    
 
                     if message.get("type") == "text":
                         msg = message.get("text", {}).get("body", "").strip().lower()
+
+                        step = user_state.get("step", "start")
                     
                         # Start of conversation or restart
                         if step == "start":
