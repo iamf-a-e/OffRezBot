@@ -513,7 +513,7 @@ def webhook():
                     user_state['user'] = User(sender).to_dict()
                 user_state['sender'] = sender
             
-                # ONLY if not already at or beyond approval step
+                # First, update or set the step early if not already in approve_manual
                 if user_state.get("step") != "approve_manual":
                     name = user_state['user'].get("name", "")
                     send(
@@ -523,14 +523,15 @@ def webhook():
                         sender,
                         phone_id
                     )
-                    user_state["step"] = "manual"
+                    user_state["step"] = "approve_manual"
                     update_user_state(sender, user_state)
                     return jsonify({"status": "ok"}), 200
-
-            
-
-                 # Step 1: approve_manual
-                if step == "manual":
+                
+                
+                step = user_state.get("step", "")
+                
+                # Step 1: approve_manual
+                if step == "approve_manual":
                     if msg in ["boys", "girls", "mixed"]:
                         user_state["house_type"] = msg
                         reply = "Do you have a *cat*? Please reply *yes* or *no*."
@@ -541,7 +542,8 @@ def webhook():
                     send(reply, sender, phone_id)
                     update_user_state(sender, user_state)
                     return jsonify({"status": "ok"}), 200
-                
+
+    
                 # Step 2: ask_cat_owner
                 if step == "ask_cat_owner":
                     if msg in ["yes", "no"]:
