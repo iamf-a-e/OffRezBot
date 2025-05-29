@@ -1,8 +1,10 @@
-from flask import Flask, request, jsonify, render_template
-import json
-import logging
-import requests
 import os
+import json
+import requests
+import logging
+from flask import Flask, request, jsonify, render_template
+import google.generativeai as genai
+import base64
 
 app = Flask(__name__)
 
