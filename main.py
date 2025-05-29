@@ -110,7 +110,7 @@ def webhook():
             # Handle user response at the start step
             if step == "start":
                 if msg == "landlord":
-                    reply = "Great! Please upload an image of your property to begin."
+                    reply = "Please send a screenshot of your WhatsApp username with your contact name for verification."
                     user_state["step"] = "awaiting_image"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
@@ -153,7 +153,7 @@ def webhook():
 
             # Step-by-step state machine for your bot flow
             if step == "approve_manual":
-                if msg in ["boys", "girls", "mixed"]:
+                if msg in ["boys", "Boys", "BOYS", "girls", "Girls", "GIRLS", "mixed", "Mixed", "MIXED"]:
                     user_state["house_type"] = msg
                     reply = "Do you have a *cat*? Please reply *yes* or *no*."
                     user_state["step"] = "ask_cat_owner"
