@@ -130,17 +130,18 @@ def webhook():
                 
                 # Step-by-step state machine for your bot flow
                 if step == "approve_manual":
-                    if msg in ["boys", "girls", "mixed"]:
-                        user_state["house_type"] = msg
-                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
-                        user_state["step"] = "ask_cat_owner"
-                        update_user_state(sender, user_state)
-                        send(reply, sender, phone_id)
-                        return jsonify({"status": "ok"}), 200
-                    else:
-                        reply = "Please reply with *boys*, *girls*, or *mixed*."
-                        send(reply, sender, phone_id)
-                        return jsonify({"status": "ok"}), 200
+                    pass  # Already in this step, wait for next input
+                elif step != "awaiting_image":
+                    reply = (
+                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                        "Now let’s collect house details.\n\n"
+                        "Do you have accommodation for *Boys*, *girls*, or *mixed*?"
+                    )
+                    user_state["step"] = "approve_manual"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
+
                 
                 elif step == "awaiting_image":
                     # Image received, move to approval step
