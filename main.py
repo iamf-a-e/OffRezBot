@@ -513,7 +513,15 @@ def webhook():
                     user_state['user'] = User(sender).to_dict()
                 user_state['sender'] = sender
             
-                # First, update or set the step early if not already in approve_manual
+               
+                user_state = get_user_state(sender)
+                step = user_state.get("step", "")
+                
+                # Log for debugging
+                logger.info(f"user_state before handling: {user_state}")
+                logger.info(f"current step: {step}, message: {msg}")
+
+                
                 if user_state.get("step") != "approve_manual":
                     name = user_state['user'].get("name", "")
                     send(
