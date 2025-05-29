@@ -492,32 +492,38 @@ def webhook():
             return challenge, 200
         logger.warning("Webhook verification failed.")
         return "Failed", 403
+elif request.method == "POST":
+    data = request.get_json()
+    logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
+    try:
+        entry = data.get("entry", [])[0]
+        changes = entry.get("changes", [])[0]
+        value = changes.get("value", {})
+        messages = value.get("messages", [])
+        if not messages:
+            logger.info("No valid messages in payload")
+            return jsonify({"status": "ok", "message": "No messages"}), 200
 
-    elif request.method == "POST":
-        data = request.get_json()
-        logger.info(f"Incoming webhook data: {json.dumps(data, indent=2)}")
-        try:
-            entry = data.get("entry", [])[0]
-            changes = entry.get("changes", [])[0]
-            value = changes.get("value", {})
-            messages = value.get("messages", [])
-            if not messages:
-                logger.info("No valid messages in payload")
-                return jsonify({"status": "ok", "message": "No messages"}), 200
+        message = messages[0]
+        sender = message.get("from")
+        if not sender or not validate_whatsapp_number(sender):
+            logger.error(f"Invalid sender ID: {sender}")
+            return jsonify({"status": "error", "message": "Invalid sender"}), 400
 
-            message = messages[0]
-            sender = message.get("from")
-            if not sender or not validate_whatsapp_number(sender):
-                logger.error(f"Invalid sender ID: {sender}")
-                return jsonify({"status": "error", "message": "Invalid sender"}), 400
+        name = None
+        if 'contacts' in value and value['contacts']:
+            contact = value['contacts'][0]
+            name = contact.get('profile', {}).get('name')
 
-            name = None
-            if 'contacts' in value and value['contacts']:
-                contact = value['contacts'][0]
-                name = contact.get('profile', {}).get('name')
+        user_state = get_user_state(sender) or {}
+        user_state["user_id"] = sender
 
-            user_state = get_user_state(sender) or {}
-            user_state["user_id"] = sender
+        # Continue your logic here...
+
+    except Exception as e:
+        logger.exception("Error handling incoming POST webhook")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
            
             
