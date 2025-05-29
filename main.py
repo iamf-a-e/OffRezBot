@@ -130,32 +130,33 @@ def webhook():
                     return jsonify({"status": "error", "message": "Missing image ID"}), 400
 
 
-                msg = ""
-                if "text" in message:
-                    msg = message["text"]["body"].strip().lower()
+            msg = ""
+            if "text" in message:
+                msg = message["text"]["body"].strip().lower()
 
-                
-                if step != "approve_manual" and step != "awaiting_image":
-                    reply = (
-                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "approve_manual"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-                elif step == "awaiting_image":
-                    # Image received, move to approval step
-                    reply = (
-                        f"Thanks {name or 'there'} for the image.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "approve_manual"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
+            
+            if step != "approve_manual" and step != "awaiting_image":
+                reply = (
+                    f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
+                    "Now let’s collect house details.\n\n"
+                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                )
+                user_state["step"] = "approve_manual"
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
+            elif step == "awaiting_image":
+                # Image received, move to approval step
+                reply = (
+                    f"Thanks {name or 'there'} for the image.\n\n"
+                    "Now let’s collect house details.\n\n"
+                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                )
+                user_state["step"] = "approve_manual"
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
+
 
             # Step-by-step state machine for your bot flow
             if step == "approve_manual":
