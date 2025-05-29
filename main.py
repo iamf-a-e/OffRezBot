@@ -514,7 +514,7 @@ def webhook():
                 user_state['sender'] = sender
             
                 # ONLY if not already at or beyond approval step
-                if user_state.get("step") == "approve_manual":
+                if user_state.get("step") != "approve_manual":
                     name = user_state['user'].get("name", "")
                     send(
                         f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
