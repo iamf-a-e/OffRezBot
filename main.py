@@ -134,16 +134,20 @@ def webhook():
 
             if step == "manual":
                 logger.info(f"User message in 'manual' step: '{msg}'")
+            
                 if msg in ["boys", "girls", "mixed"]:
+                    # ✅ Valid input: set house type and move to next step
                     user_state["house_type"] = msg
                     user_state["step"] = "ask_cat_owner"
                     update_user_state(sender, user_state)
+            
                     reply = "Do you have a cat? Reply *yes* or *no*."
                 else:
+                    # ❌ Invalid input: repeat current question
                     reply = "Please reply with *boys*, *girls*, or *mixed*."
+            
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
-
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
