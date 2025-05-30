@@ -130,8 +130,6 @@ def webhook():
                 
                 # Step-by-step state machine for your bot flow
                 if step == "approve_manual":
-                    pass  # Already in this step, wait for next input
-                elif step != "awaiting_image":
                     reply = (
                         f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
                         "Now let’s collect house details.\n\n"
