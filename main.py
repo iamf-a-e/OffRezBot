@@ -143,7 +143,8 @@ def webhook():
                         user_state["step"] = "manual"
                     else:
                         # Unexpected image
-                        reply = "Thanks for the image. Please continue with the registration process."
+                        reply = "Thanks {name or 'there'}. Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        user_state["step"] = "manual"
                 
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
