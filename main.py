@@ -92,7 +92,7 @@ def webhook():
             user_state = get_user_state(sender) or {}
             if "user" not in user_state:
                 user_state["user"] = {"name": name}
-            user_state["user_id"] = sender
+                user_state["user_id"] = sender
 
             # Initialize step if not present
             step = user_state.get("step")
@@ -124,9 +124,6 @@ def webhook():
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
                     
-
-                msg_type = message.get("type")
-                msg = message.get("text", {}).get("body", "").strip().lower() if msg_type == "text" else ""
 
                 
                 # ✅ Handle image input early
