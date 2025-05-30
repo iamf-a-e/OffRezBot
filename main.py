@@ -156,7 +156,7 @@ def webhook():
                 elif step == "manual":
                     if msg in ["boys", "girls", "mixed"]:
                         user_state["house_type"] = msg
-                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
+                        reply = "we are here"
                         user_state["step"] =  "ask_cat_owner"                     
                     else:
                         reply = "Please reply with *boys*, *girls*, or *mixed*."
