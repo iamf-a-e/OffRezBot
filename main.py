@@ -4,6 +4,7 @@ import requests
 import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
+
 from redis_utils import get_user_state, update_user_state, save_user_state
 
 app = Flask(__name__)
@@ -55,7 +56,6 @@ def webhook():
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
-
         if mode == "subscribe" and token == "BOT":
             return challenge, 200
         return "Verification failed", 403
@@ -75,9 +75,6 @@ def webhook():
 
             message = messages[0]
             sender = message.get("from")
-            if not sender:
-                return jsonify({"status": "error", "message": "No sender"}), 400
-
             name = value.get("contacts", [{}])[0].get("profile", {}).get("name", "")
             msg_type = message.get("type")
             msg = message.get("text", {}).get("body", "").strip().lower() if msg_type == "text" else ""
@@ -111,16 +108,11 @@ def webhook():
 
             if msg_type == "image":
                 if step == "awaiting_image":
-                    reply = (
-                        f"Thanks {name or 'there'} for the image.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
+                    reply = f"Thanks {name or 'there'} for the image.\n\nNow let’s collect house details.\n\nDo you have accommodation for *boys*, *girls*, or *mixed*?"
                     user_state["step"] = "manual"
                 else:
                     reply = f"Thanks {name or 'there'}. Do you have accommodation for *boys*, *girls*, or *mixed*?"
                     user_state["step"] = "manual"
-
                 update_user_state(sender, user_state)
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
@@ -135,7 +127,9 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
                 else:
                     reply = "Please reply with *boys*, *girls*, or *mixed*."
-
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
