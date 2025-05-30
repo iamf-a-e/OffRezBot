@@ -94,9 +94,12 @@ def webhook():
             user_state["user_id"] = sender
 
             # Initialize step if not present
-            step = user_state.get("step", "start")
+            step = user_state.get("step")
+            if not step:
+                user_state["step"] = "start"
+                step = "start"
 
-            # Handle greetings (hi, hie, hey) anytime
+            # Handle greetings
             if msg in ["hi", "hie", "hey"]:
                 reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
                 user_state["step"] = "start"
@@ -104,33 +107,60 @@ def webhook():
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
-            # Now handle per step
-
+            # Handle user response at the start step
             if step == "start":
                 if msg == "landlord":
                     reply = "Great! Please send a screenshot of your WhatsApp username with your contact name for verification."
                     user_state["step"] = "awaiting_image"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
 
                 elif msg == "student":
                     reply = "Welcome, student! Please download our app to secure your accommodation."
                     user_state["step"] = "student_pending"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
 
-                elif msg_type == "image":
-                    # Unexpected image at start, prompt accordingly
-                    reply = f"Thanks {name or 'there'}. Do you want to register as a landlord or student? Please reply *landlord* or *student*."
-                else:
-                    reply = "Please reply with *landlord* or *student* to proceed."
-
-            elif step == "awaiting_image":
+                # The following re-extracts msg_type and msg — keep as is
+                msg_type = message.get("type")
+                msg = ""
+                
+                if "text" in message:
+                    msg = message["text"]["body"].strip().lower()
+                
+                # Handle image input early
                 if msg_type == "image":
-                    reply = (
-                        f"Thanks {name or 'there'} for the image.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "manual"
+                    if step == "awaiting_image":
+                        # Expected image, proceed
+                        reply = (
+                            f"Thanks {name or 'there'} for the image.\n\n"
+                            "Now let’s collect house details.\n\n"
+                            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        )
+                        user_state["step"] = "manual"
+                    else:
+                        # Unexpected image
+                        reply = f"Thanks {name or 'there'}. Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        user_state["step"] = "manual"
+                
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
+
+                # Here is the key fix: make sure reply is always assigned
+                # Handle manual step logic here as well (originally inside start)
+                if step == "manual":
+                    if msg in ["boys", "girls", "mixed"]:
+                        user_state["house_type"] = msg
+                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
+                        user_state["step"] = "ask_cat_owner"
+                    else:
+                        reply = "Please reply with *boys*, *girls*, or *mixed*."
                 else:
-                    reply = "Please send a screenshot of your WhatsApp username with your contact name for verification."
+                    # If none of the above matched, assign a fallback reply
+                    reply = "Sorry, I did not understand that. Please try again."
 
             elif step == "manual":
                 if msg in ["boys", "girls", "mixed"]:
