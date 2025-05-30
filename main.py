@@ -1,3 +1,59 @@
+import os
+import json
+import requests
+import logging
+from flask import Flask, request, jsonify, render_template
+import google.generativeai as genai
+
+app = Flask(__name__)
+
+# Environment variables
+wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
+WA_TOKEN = wa_token
+phone_id = os.environ.get("PHONE_ID")
+genai.configure(api_key=os.environ.get("GEN_API"))    # Gemini API Key
+owner_phone = os.environ.get("OWNER_PHONE")
+GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
+
+logger = logging.getLogger("main")
+logging.basicConfig(level=logging.INFO)
+
+# Import Redis Upstash functions
+from redis_utils import get_user_state, update_user_state, save_user_state
+
+def send(message, recipient, phone_id):
+    """Send message via WhatsApp API"""
+    if not all([message, recipient, phone_id]):
+        logger.error("Missing parameters in send()")
+        return False
+
+    url = f"https://graph.facebook.com/v13.0/{phone_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {WA_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": recipient,
+        "type": "text",
+        "text": {"body": message}
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        logger.info(f"Sent message to {recipient}: {message}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send message to {recipient}: {e}")
+        return False
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return render_template("connected.html")
+
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -232,3 +288,8 @@ def webhook():
         except Exception as e:
             logger.exception("Unhandled error in webhook")
             return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
