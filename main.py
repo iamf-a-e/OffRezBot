@@ -133,6 +133,7 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
 
             if step == "manual":
+                logger.info(f"User message in 'manual' step: '{msg}'")
                 if msg in ["boys", "girls", "mixed"]:
                     user_state["house_type"] = msg
                     user_state["step"] = "ask_cat_owner"
