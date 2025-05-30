@@ -137,7 +137,7 @@ def webhook():
                         "Now let’s collect house details.\n\n"
                         "Do you have accommodation for *Boys*, *girls*, or *mixed*?"
                     )
-                    user_state["step"] = "approve_manual"
+                    user_state["step"] = "manual"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
@@ -150,7 +150,7 @@ def webhook():
                         "Now let’s collect house details.\n\n"
                         "Do you have accommodation for *boys*, *girls*, or *mixed*?"
                     )
-                    user_state["step"] = "approve_manual"
+                    user_state["step"] = "manual"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
@@ -162,10 +162,18 @@ def webhook():
                         "Now let’s collect house details.\n\n"
                         "Do you have accommodation for *Boys*, *girls*, or *mixed*?"
                     )
-                    user_state["step"] = "approve_manual"
+                    user_state["step"] = "manual"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
+
+                elif step == "manual":
+                    if msg in ["boys", "girls", "mixed"]:
+                        user_state["house_type"] = msg
+                        reply = "Do you have a *cat*? Please reply *yes* or *no*."
+                        user_state["step"] =  "ask_cat_owner"                     
+                    else:
+                        return "Please reply with *boys*, *girls*, or *mixed*.", user_state
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
