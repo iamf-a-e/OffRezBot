@@ -154,12 +154,17 @@ def webhook():
 
 
                 elif step == "manual":
-                    if msg in ["boys", "girls", "mixed"]:
-                        user_state["house_type"] = msg
-                        reply = "we are here"
-                        user_state["step"] =  "ask_cat_owner"                     
-                    else:
-                        reply = "Please reply with *boys*, *girls*, or *mixed*."
+                    try:
+                        if msg in ["boys", "girls", "mixed"]:
+                            user_state["house_type"] = msg
+                            reply = "we are here"
+                            user_state["step"] = "ask_cat_owner"
+                        else:
+                            reply = "Please reply with *boys*, *girls*, or *mixed*."
+                    except Exception as e:
+                        logger.exception("Error in 'manual' step")
+                        reply = "Oops! Something went wrong while processing your response. Please try again."
+
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
