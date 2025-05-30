@@ -123,32 +123,28 @@ def webhook():
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
                     
+
+                msg_type = message.get("type")
+                msg = ""
                 
-                msg = ""            
+                # Get text message if available
                 if "text" in message:
                     msg = message["text"]["body"].strip().lower()
                 
-                # Step-by-step state machine for your bot flow
-                if step == "approve_manual":
-                    reply = (
-                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *Boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "manual"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-
+                # ✅ Handle image input early
+                if msg_type == "image":
+                    if step == "awaiting_image":
+                        # Expected image, proceed
+                        reply = (
+                            f"Thanks {name or 'there'} for the image.\n\n"
+                            "Now let’s collect house details.\n\n"
+                            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        )
+                        user_state["step"] = "manual"
+                    else:
+                        # Unexpected image
+                        reply = "Thanks for the image. Please continue with the registration process."
                 
-                elif step == "awaiting_image":
-                    # Image received, move to approval step
-                    reply = (
-                        f"Thanks {name or 'there'} for the image.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "manual"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
