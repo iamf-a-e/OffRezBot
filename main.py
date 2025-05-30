@@ -130,8 +130,12 @@ def webhook():
                     user_state["house_type"] = msg
                     reply = "Do you have a *cat*? Please reply *yes* or *no*."
                     user_state["step"] = "ask_cat_owner"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
                 else:
                     reply = "Please reply with *boys*, *girls*, or *mixed*."
+
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
