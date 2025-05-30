@@ -4,6 +4,7 @@ import requests
 import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
+from redis_utils import get_user_state, update_user_state, save_user_state
 
 app = Flask(__name__)
 
@@ -14,9 +15,6 @@ phone_id = os.environ.get("PHONE_ID")
 genai.configure(api_key=os.environ.get("GEN_API"))
 owner_phone = os.environ.get("OWNER_PHONE")
 GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
-
-# Redis Upstash
-from redis_utils import get_user_state, update_user_state, save_user_state
 
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO)
@@ -85,27 +83,33 @@ def webhook():
             msg = message.get("text", {}).get("body", "").strip().lower() if msg_type == "text" else ""
 
             user_state = get_user_state(sender) or {}
-            user_state.setdefault("user", {"name": name})
+            if "user" not in user_state:
+                user_state["user"] = {"name": name}
             user_state["user_id"] = sender
             step = user_state.get("step", "start")
-
-            reply = "Sorry, I did not understand that. Please try again."
 
             if msg in ["hi", "hie", "hey"]:
                 reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
                 user_state["step"] = "start"
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
 
-            elif step == "start":
+            if step == "start":
                 if msg == "landlord":
                     reply = "Great! Please send a screenshot of your WhatsApp username with your contact name for verification."
                     user_state["step"] = "awaiting_image"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
                 elif msg == "student":
                     reply = "Welcome, student! Please download our app to secure your accommodation."
                     user_state["step"] = "student_pending"
-                else:
-                    reply = "Please reply with *student* or *landlord*."
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
 
-            elif msg_type == "image":
+            if msg_type == "image":
                 if step == "awaiting_image":
                     reply = (
                         f"Thanks {name or 'there'} for the image.\n\n"
@@ -116,6 +120,10 @@ def webhook():
                 else:
                     reply = f"Thanks {name or 'there'}. Do you have accommodation for *boys*, *girls*, or *mixed*?"
                     user_state["step"] = "manual"
+
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
 
             elif step == "manual":
                 if msg in ["boys", "girls", "mixed"]:
@@ -134,12 +142,12 @@ def webhook():
                     reply = "Do you have a cat? Please reply *yes* or *no*."
 
             elif step == "ask_availability":
-                if msg == "yes":
-                    reply = "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
-                    user_state["step"] = "ask_room_type"
-                elif msg == "no":
+                if msg == "no":
                     reply = "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
                     user_state["step"] = "end"
+                elif msg == "yes":
+                    reply = "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
+                    user_state["step"] = "ask_room_type"
                 else:
                     reply = "Do you have a vacancy? Please reply *yes* or *no*."
 
@@ -209,7 +217,14 @@ def webhook():
                     reply = "Please type *confirm* to publish your listing or *cancel* to abort."
 
             elif step == "end":
-                reply = "Thank you for contacting us. Type 'Hi' to start again."
+                if msg in ["hi", "hie", "hey"]:
+                    reply = "Welcome back! Are you a *student* or a *landlord*?"
+                    user_state["step"] = "start"
+                else:
+                    reply = "Thank you for contacting us. Type 'Hi' to start again."
+
+            else:
+                reply = "Sorry, I did not understand that. Please try again."
 
             update_user_state(sender, user_state)
             send(reply, sender, phone_id)
