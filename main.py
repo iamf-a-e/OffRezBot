@@ -156,16 +156,6 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
 
 
-                elif step != "approve_manual":
-                    reply = (
-                        f"Thanks {name or 'there'}. Approval will be done manually for security reasons.\n\n"
-                        "Now let’s collect house details.\n\n"
-                        "Do you have accommodation for *Boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "manual"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
 
                 elif step == "manual":
                     if msg in ["boys", "girls", "mixed"]:
