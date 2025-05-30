@@ -132,20 +132,17 @@ def webhook():
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
-            elif step == "manual":
-                try:
-                    if msg in ["boys", "girls", "mixed"]:
-                        user_state["house_type"] = msg
-                        user_state["step"] = "ask_cat_owner"
-                        reply = "Do you have a cat? Reply *yes* or *no*."
-                    else:
-                        reply = "Please reply with *boys*, *girls*, or *mixed*."
-                except Exception as e:
-                    logger.exception("Error in 'manual' step")
-                    reply = "Oops! Something went wrong while processing your response. Please try again."
-                update_user_state(sender, user_state)
+            if step == "manual":
+                if msg in ["boys", "girls", "mixed"]:
+                    user_state["house_type"] = msg
+                    user_state["step"] = "ask_cat_owner"
+                    update_user_state(sender, user_state)
+                    reply = "Do you have a cat? Reply *yes* or *no*."
+                else:
+                    reply = "Please reply with *boys*, *girls*, or *mixed*."
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
+
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
