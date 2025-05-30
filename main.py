@@ -53,7 +53,6 @@ def send(message, recipient, phone_id):
 def index():
     return render_template("connected.html")
 
-
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -92,10 +91,7 @@ def webhook():
                 user_state["user"] = {"name": name}
                 user_state["user_id"] = sender
 
-            step = user_state.get("step")
-            if not step:
-                user_state["step"] = "start"
-                step = "start"
+            step = user_state.get("step", "start")
 
             # Handle restart commands at any point
             if msg in ["hi", "hie", "hey"]:
@@ -126,20 +122,31 @@ def webhook():
 
             elif step == "awaiting_image":
                 if msg_type == "image":
-                    reply = (
-                        f"Thanks {name} for the image.\n\n"
-                        "Now let's collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "manual"
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
+                    # Get image ID and download URL
+                    image_id = message.get("image", {}).get("id")
+                    if image_id:
+                        # You can process the image here if needed
+                        # For now, we'll just acknowledge receipt
+                        reply = (
+                            f"Thanks {name} for the verification image.\n\n"
+                            "Now let's collect house details.\n\n"
+                            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        )
+                        user_state["step"] = "manual"
+                        user_state["verification_image_id"] = image_id  # Store image ID for reference
+                        update_user_state(sender, user_state)
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
+                    else:
+                        reply = "We couldn't process the image. Please try sending it again."
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
                 else:
-                    reply = "Please send a screenshot for verification."
+                    reply = "Please send a screenshot for verification as an image."
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
+            
             elif step == "manual":
                 logger.info(f"User message in 'manual' step: '{msg}'")
                 
@@ -154,6 +161,7 @@ def webhook():
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
+             
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
                     user_state["has_cat"] = msg
