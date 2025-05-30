@@ -126,11 +126,8 @@ def webhook():
                     
 
                 msg_type = message.get("type")
-                msg = ""
-                
-                # Get text message if available
-                if "text" in message:
-                    msg = message["text"]["body"].strip().lower()
+                msg = message.get("text", {}).get("body", "").strip().lower() if msg_type == "text" else ""
+
                 
                 # ✅ Handle image input early
                 if msg_type == "image":
