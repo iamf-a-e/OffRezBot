@@ -125,40 +125,41 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
                     
 
-                
-                # ✅ Handle image input early
-                if msg_type == "image":
-                    if step == "awaiting_image":
-                        # Expected image, proceed
-                        reply = (
-                            f"Thanks {name} for the image.\n\n"
-                            "Now let’s collect house details.\n\n"
-                            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                        )
-                        user_state["step"] = "manual"
+            # ✅ Handle image input early
+            if msg_type == "image":
+                if step == "awaiting_image":
+                    # Expected image, proceed
+                    reply = (
+                        f"Thanks {name} for the image.\n\n"
+                        "Now let’s collect house details.\n\n"
+                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                    )
+                    user_state["step"] = "manual"
+                else:
+                    # Unexpected image
+                    reply = f"Thanks {name}. Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                    user_state["step"] = "manual"
+            
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
+            
+            # ✅ Handle manual house type input
+            elif step == "manual":
+                try:
+                    if msg in ["boys", "girls", "mixed"]:
+                        user_state["house_type"] = msg
+                        reply = "we are here"
+                        user_state["step"] = "ask_cat_owner"
                     else:
-                        # Unexpected image
-                        reply = f"Thanks {name}. Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                        user_state["step"] = "manual"
-                
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
-
-
-
-                elif step == "manual":
-                    try:
-                        if msg in ["boys", "girls", "mixed"]:
-                            user_state["house_type"] = msg
-                            reply = "we are here"
-                            user_state["step"] = "ask_cat_owner"
-                        else:
-                            reply = "Please reply with *boys*, *girls*, or *mixed*."
-                    except Exception as e:
-                        logger.exception("Error in 'manual' step")
-                        reply = "Oops! Something went wrong while processing your response. Please try again."
-
+                        reply = "Please reply with *boys*, *girls*, or *mixed*."
+                except Exception as e:
+                    logger.exception("Error in 'manual' step")
+                    reply = "Oops! Something went wrong while processing your response. Please try again."
+            
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
