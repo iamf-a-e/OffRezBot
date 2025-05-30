@@ -158,7 +158,7 @@ def webhook():
                         reply = "Do you have a *cat*? Please reply *yes* or *no*."
                         user_state["step"] =  "ask_cat_owner"                     
                     else:
-                        return "Please reply with *boys*, *girls*, or *mixed*.", user_state
+                        reply = "Please reply with *boys*, *girls*, or *mixed*."
 
             elif step == "ask_cat_owner":
                 if msg in ["yes", "no"]:
@@ -167,6 +167,8 @@ def webhook():
                     user_state["step"] = "ask_availability"
                 else:
                     reply = "Do you have a cat? Please reply *yes* or *no*."
+
+            
             elif step == "ask_availability":
                 if msg == "no":
                     reply = "OK thanks. Whenever you have vacancies, don’t hesitate to say 'Hi!'"
@@ -176,6 +178,8 @@ def webhook():
                     user_state["step"] = "ask_room_type"
                 else:
                     reply = "Do you have a vacancy? Please reply *yes* or *no*."
+
+            
             elif step == "ask_room_type":
                 if msg.isdigit():
                     user_state["room_single"] = int(msg)
@@ -183,6 +187,8 @@ def webhook():
                     user_state["step"] = "confirm_single"
                 else:
                     reply = "Please enter the number of students needing single rooms (number only)."
+
+            
             elif step == "confirm_single":
                 try:
                     user_state["rent_single"] = float(msg)
@@ -190,6 +196,8 @@ def webhook():
                     user_state["step"] = "ask_2_sharing"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 130)."
+
+            
             elif step == "ask_2_sharing":
                 if msg.isdigit():
                     user_state["room_2_sharing"] = int(msg)
@@ -197,6 +205,8 @@ def webhook():
                     user_state["step"] = "confirm_2_sharing"
                 else:
                     reply = "Please enter number of students needing 2-sharing rooms (number only)."
+
+            
             elif step == "confirm_2_sharing":
                 try:
                     user_state["rent_2_sharing"] = float(msg)
@@ -204,6 +214,8 @@ def webhook():
                     user_state["step"] = "ask_3_sharing"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 80)."
+
+            
             elif step == "ask_3_sharing":
                 if msg.isdigit():
                     user_state["room_3_sharing"] = int(msg)
@@ -211,6 +223,8 @@ def webhook():
                     user_state["step"] = "confirm_3_sharing"
                 else:
                     reply = "Please enter number of students needing 3-sharing rooms (number only)."
+
+            
             elif step == "confirm_3_sharing":
                 try:
                     user_state["rent_3_sharing"] = float(msg)
@@ -218,10 +232,14 @@ def webhook():
                     user_state["step"] = "ask_student_age"
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 60)."
+
+            
             elif step == "ask_student_age":
                 user_state["student_age"] = msg
                 reply = "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
                 user_state["step"] = "confirm_listing"
+
+            
             elif step == "confirm_listing":
                 if msg == "confirm":
                     reply = "Thank you! Your listing will be published soon."
@@ -233,6 +251,8 @@ def webhook():
                     save_user_state(sender, user_state)
                 else:
                     reply = "Please type *confirm* to publish your listing or *cancel* to abort."
+
+            
             elif step == "end":
                 if msg in ["hi", "hie", "hey"]:
                     reply = "Welcome back! Are you a *student* or a *landlord*?"
