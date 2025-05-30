@@ -263,8 +263,7 @@ def webhook():
             else:
                 reply = "Sorry, I did not understand that. Please try again."
 
-            update_user_state(sender, user_state)
-            send(reply, sender, phone_id)
+            update_user_state(sender, user_state)            
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
