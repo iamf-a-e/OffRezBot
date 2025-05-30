@@ -48,6 +48,7 @@ def send(message, recipient, phone_id):
         logger.error(f"Failed to send message to {recipient}: {e}")
         return False
 
+
 @app.route("/", methods=["GET"])
 def index():
     return render_template("connected.html")
