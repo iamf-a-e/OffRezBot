@@ -354,6 +354,24 @@ def handle_manual_house_type(msg, sender, user_state, phone_id):
     return jsonify({"status": "ok"})
 
 
+def handle_awaiting_image(msg, msg_type, sender, name, user_state, phone_id):
+    step = user_state.get("step")
+
+    if msg_type == "image":
+        reply = (
+            f"Thanks {name or 'there'} for the image.\n\n"
+            "Now let's collect house details.\n\n"
+            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+        )
+        user_state["step"] = "manual"
+    else:
+        reply = "Please send an image (a screenshot of your WhatsApp profile name with your contact name) to proceed."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+
 def handle_ask_cat_owner(msg, sender, user_state, phone_id):
     msg = msg.lower()
     if msg in ["yes", "no"]:
