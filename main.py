@@ -314,13 +314,18 @@ def handle_awaiting_image(sender, name, user_state, phone_id):
 
     if step == "awaiting_image":
         reply = (
-            f"Thanks {name or 'there'} for the image.\n\n"
+            f"Thanks {name} for the image.\n\n"
             "Now let's collect house details.\n\n"
             "Do you have accommodation for *boys*, *girls*, or *mixed*?"
         )
         user_state["step"] = "manual"
     else:
-        reply = "Please respond to the current question with text."
+        reply = (
+            f"Thanks {name} for the image.\n\n"
+            "Now let's collect house details.\n\n"
+            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+        )
+        user_state["step"] = "manual"
 
     update_user_state(sender, user_state)
     send(reply, sender, phone_id)
