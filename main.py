@@ -328,6 +328,7 @@ def handle_awaiting_image(sender, name, user_state, phone_id):
 
 
 
+
 def handle_manual_house_type(msg, sender, user_state, phone_id):
     msg = msg.lower()
     if msg in ["boys", "girls", "mixed"]:
