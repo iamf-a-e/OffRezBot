@@ -290,27 +290,5 @@ def webhook():
             return jsonify({"status": "error", "message": str(e)}), 500
 
 
-
-action_mapping = {
-    "start": handle_start,
-    "awaiting_image": handle_awaiting_image,
-    "manual": handle_manual_house_type,
-    "ask_cat_owner": handle_ask_cat_owner,
-    "ask_availability": handle_ask_availability,
-    "ask_room_type": handle_ask_single_room_count,
-    "confirm_single": handle_confirm_single_rent,
-    "ask_2_sharing": handle_ask_2_sharing_count,
-    "confirm_2_sharing": handle_confirm_2_sharing_rent,
-    "ask_3_sharing": handle_ask_3_sharing_count,
-    "confirm_3_sharing": handle_confirm_3_sharing_rent,
-    "ask_student_age": handle_ask_student_age,
-    "confirm_listing": handle_confirm_listing,
-    "student_pending": handle_student_pending,
-    "end": handle_end,
-}
-
-
-
-
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
