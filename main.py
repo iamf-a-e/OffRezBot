@@ -122,32 +122,40 @@ def webhook():
 
 
             
-            def handle_awaiting_image(sender, name, user_state, phone_id):
-                step = user_state.get("step")
+            def handle_awaiting_image(sender, name, user_state, phone_id, message):
+                """
+                Handles the 'awaiting_image' step when a user sends an image.
+                Args:
+                    sender: The user's phone number
+                    name: The user's name
+                    user_state: Current user state dictionary
+                    phone_id: Phone ID for sending messages
+                    message: The incoming message object
+                Returns:
+                    Tuple: (reply message, HTTP response)
+                """
+                # Verify we're actually in the awaiting_image step
+                if user_state.get("step") != "awaiting_image":
+                    reply = "Please complete the current step first."
+                    send(reply, sender, phone_id)
+                    return reply, jsonify({"status": "unexpected_image"}), 400
             
-                if step == "awaiting_image":
-                    user_state["step"] = "manual"
-                    reply = (
-                        f"Thanks {name} for the image.\n\n"
-                        "Now let's collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )                   
-                    phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
-                else:
-                    user_state["step"] = "manual"
-                    reply = (
-                        f"Thanks {name} for the image.\n\n"
-                        "Now let's collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )                    
-                    phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
-            
+                # Process the image and move to next step
+                reply = (
+                    f"Thanks {name or 'there'} for the image.\n\n"
+                    "Now let's collect house details.\n\n"
+                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                )
+                
+                # Update state to move to manual step (next question)
+                user_state["step"] = "manual"
                 update_user_state(sender, user_state)
+                
+                # Send the response
                 send(reply, sender, phone_id)
-                return reply
-
+                return reply, jsonify({"status": "ok"}), 200
+            
+                
             # ========== START STEP ==========
             if step == "start":
                 if msg in ["hi", "hie", "hey"]:
