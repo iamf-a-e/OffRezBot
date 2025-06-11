@@ -104,7 +104,7 @@ def webhook():
                     )
                     user_state["step"] = "manual"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = (
                         f"Thanks {name or 'there'} for the image.\n\n"
@@ -113,7 +113,7 @@ def webhook():
                     )
                     user_state["step"] = "manual"
                     phone_number = message["from"]
-                    #update_user_state(phone_number, user_state)
+                    #update_user_state(sender, user_state)
 
                 
                 update_user_state(sender, user_state)
@@ -128,12 +128,12 @@ def webhook():
                     reply = "Great! Please send a screenshot of your WhatsApp username with your contact name for verification."
                     user_state["step"] = "awaiting_image"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 elif msg == "student":
                     reply = "Welcome, student! Please download our app to secure your accommodation."
                     user_state["step"] = "student_pending"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Please reply with *student* or *landlord* to continue."
                 
@@ -177,12 +177,12 @@ def webhook():
                     reply = "OK thanks. Whenever you have vacancies, don't hesitate to say 'Hi!'"
                     user_state["step"] = "end"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 elif msg == "yes":
                     reply = "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
                     user_state["step"] = "ask_room_type"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Do you have a vacancy? Please reply *yes* or *no*."
                 
@@ -197,7 +197,7 @@ def webhook():
                     reply = "Please confirm your rent for a single room (e.g. 130)."
                     user_state["step"] = "confirm_single"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Please enter the number of students needing single rooms (number only)."
                 
@@ -211,7 +211,7 @@ def webhook():
                     reply = "How many students need 2-sharing rooms? (Enter number only)"
                     user_state["step"] = "ask_2_sharing"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 130)."
                 
@@ -225,7 +225,7 @@ def webhook():
                     reply = "Please confirm your rent for 2-sharing rooms (e.g. 80)."
                     user_state["step"] = "confirm_2_sharing"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Please enter number of students needing 2-sharing rooms (number only)."
                 
@@ -239,7 +239,7 @@ def webhook():
                     reply = "How many students need 3-sharing rooms? (Enter number only)"
                     user_state["step"] = "ask_3_sharing"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 80)."
                 
@@ -253,7 +253,7 @@ def webhook():
                     reply = "Please confirm your rent for 3-sharing rooms (e.g. 60)."
                     user_state["step"] = "confirm_3_sharing"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Please enter number of students needing 3-sharing rooms (number only)."
                 
@@ -267,7 +267,7 @@ def webhook():
                     reply = "What age group are the students? (e.g. 18-22)"
                     user_state["step"] = "ask_student_age"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 except ValueError:
                     reply = "Please enter the rent as a number (e.g. 60)."
                 
@@ -290,12 +290,12 @@ def webhook():
                     reply = "Thank you! Your listing will be published soon."
                     user_state["step"] = "end"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 elif msg == "cancel":
                     reply = "Your listing was cancelled. Type 'Hi' to start over."
                     user_state["step"] = "end"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Please type *confirm* to publish your listing or *cancel* to abort."
                 
@@ -309,7 +309,7 @@ def webhook():
                     reply = "Welcome back! Are you a *student* or a *landlord*?"
                     user_state["step"] = "start"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    update_user_state(sender, user_state)
                 else:
                     reply = "Thank you for contacting us. Type 'Hi' to start again."
                 
