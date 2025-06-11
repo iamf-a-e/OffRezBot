@@ -109,7 +109,7 @@ def webhook():
                     reply = (
                         f"Thanks {name or 'there'} for the image.\n\n"
                         "Now let's collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        "Ola"
                     )
                     user_state["step"] = "manual"
                     phone_number = message["from"]
