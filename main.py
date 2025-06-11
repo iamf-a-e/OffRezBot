@@ -116,7 +116,7 @@ def webhook():
                     update_user_state(phone_number, user_state)
 
                 
-                update_user_state(sender, user_state)
+                #update_user_state(sender, user_state)
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
