@@ -149,12 +149,12 @@ def webhook():
                     user_state["step"] = "ask_cat_owner"
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
+                    
                 else:
                     reply = "Please reply with *boys*, *girls*, or *mixed*."
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
+                update_user_state(sender, user_state)
+                send(reply, sender, phone_id)
+                return jsonify({"status": "ok"}), 200
 
             # ========== CAT OWNER STEP ==========
             elif step == "ask_cat_owner":
