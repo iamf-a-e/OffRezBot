@@ -113,7 +113,7 @@ def webhook():
                     )
                     user_state["step"] = "manual"
                     phone_number = message["from"]
-                    #update_user_state(sender, user_state)
+                    update_user_state(sender, user_state)
 
                 
                 update_user_state(sender, user_state)
