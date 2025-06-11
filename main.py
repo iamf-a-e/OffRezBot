@@ -113,10 +113,10 @@ def webhook():
                     )
                     user_state["step"] = "manual"
                     phone_number = message["from"]
-                    update_user_state(phone_number, user_state)
+                    #update_user_state(phone_number, user_state)
 
                 
-                #update_user_state(sender, user_state)
+                update_user_state(sender, user_state)
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
 
@@ -143,7 +143,7 @@ def webhook():
 
             # ========== MANUAL STEP (boys/girls/mixed) ==========
             elif step == "manual":
-                if msg in ["boys", "girls", "mixed"]:
+                if msg.lower() in ["boys", "girls", "mixed"]:
                     user_state["house_type"] = msg
                     reply = "Do you have a *cat*? Please reply *yes* or *no*."
                     user_state["step"] = "ask_cat_owner"
