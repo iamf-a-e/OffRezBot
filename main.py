@@ -5,7 +5,7 @@ import logging
 from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 # Environment variables
 wa_token = os.environ.get("WA_TOKEN")  # WhatsApp API Key
