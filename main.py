@@ -94,30 +94,31 @@ def webhook():
             user_state["user_id"] = sender
             current_step = user_state.get("step", "start")
 
-            # Handle image messages first
-            if msg_type == "image" and current_step == "awaiting_image":
-                reply = (
-                    f"Thanks {name or 'there'} for the image.\n\n"
-                    "Now let's collect house details.\n\n"
-                    "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                )
-                user_state["step"] = "manual"
-                update_user_state(sender, user_state)
-                send(reply, sender, phone_id)
+            # Handle image messages
+            if msg_type == "image":
+                if current_step == "awaiting_image":
+                    reply = (
+                        f"Thanks {name or 'there'} for the image.\n\n"
+                        "Now let's collect house details.\n\n"
+                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                    )
+                    user_state["step"] = "manual"
+                    update_user_state(sender, user_state)
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
+                else:
+                    # If image received at unexpected step
+                    reply = "Please send a text message to continue with your current request."
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
+
+            # Only process text messages from this point
+            if msg_type != "text":
                 return jsonify({"status": "ok"}), 200
 
-            # Use action mapping if it's a text message
-            if msg_type == "text":
-                handler = action_mapping.get(current_step, handle_default)
-                return handler(msg, sender, name, user_state, phone_id, msg_type)
-
-            # Default response for non-text messages when not expecting image
-            if current_step != "awaiting_image":
-                reply = "Please send a text message to continue."
-                send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
-            return jsonify({"status": "ok"}), 200
+            # Use action mapping for text messages
+            handler = action_mapping.get(current_step, handle_default)
+            return handler(msg, sender, name, user_state, phone_id)
 
         except Exception as e:
             logger.exception("Unhandled error in webhook")
