@@ -283,6 +283,27 @@ def handle_start(selected_option, sender, name, user_state):
             "Welcome student! Please download our app to find accommodation."
         )
 
+def handle_awaiting_image(selected_option, sender, name, user_state):
+    """Handle the awaiting image verification step"""
+    if selected_option == "image":
+        user_state.update({
+            "image_received": True,
+            "verified": True,
+            "step": "manual"
+        })
+        update_user_state(sender, user_state)
+        send_list_message(
+            sender,
+            "Is your accommodation for boys, girls, or mixed?",
+            ["Boys", "Girls", "Mixed"],
+            "Accommodation Type"
+        )
+    else:
+        send_text_message(
+            sender,
+            "Please send an image (screenshot of your WhatsApp profile) to verify your identity."
+        )
+        
 def handle_manual_house_type(selected_option, sender, name, user_state):
     user_state["house_type"] = selected_option
     user_state["step"] = "ask_cat_owner"
