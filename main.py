@@ -312,7 +312,209 @@ def handle_ask_availability(selected_option, sender, name, user_state, phone_id,
         )
     return jsonify({"status": "ok"})
 
-# ... [keep all your existing number input handlers as they are] ...
+def handle_start(msg, sender, name, user_state, phone_id):
+    msg = msg.lower()
+    
+    if msg in ["hi", "hello", "hey"]:
+        reply = "Hello! Are you a *student* or *landlord*?"
+        user_state["step"] = "start"
+    elif msg == "landlord":
+        reply = "Great! Please send a screenshot of your WhatsApp profile for verification."
+        user_state.update({
+            "step": "awaiting_image",
+            "verified": False,
+            "image_received": False
+        })
+    elif msg == "student":
+        reply = "Welcome student! Please download our app to find accommodation."
+        user_state["step"] = "student_pending"
+    else:
+        reply = "Please specify if you're a *student* or *landlord*."
+    
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_awaiting_image(msg, sender, name, user_state, phone_id, msg_type):
+    if msg_type == "image":
+        reply = (
+            f"Thanks {name or 'there'} for the image.\n\n"
+            "Now let's collect house details.\n\n"
+            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+        )
+        user_state["step"] = "manual"
+    else:
+        reply = "Please send an image (a screenshot of your WhatsApp profile name with your contact name) to proceed."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_manual_house_type(msg, sender, name, user_state, phone_id, msg_type=None):
+    msg = msg.lower()
+    if msg in ["boys", "girls", "mixed"]:
+        user_state["house_type"] = msg
+        reply = "Do you have a *cat*? Please reply *yes* or *no*."
+        user_state["step"] = "ask_cat_owner"
+    else:
+        reply = "Please reply with *boys*, *girls*, or *mixed*."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_ask_cat_owner(msg, sender, name, user_state, phone_id, msg_type=None):
+    msg = msg.lower()
+    if msg in ["yes", "no"]:
+        user_state["has_cat"] = msg
+        reply = "Do you have a vacancy? Reply *yes* or *no*."
+        user_state["step"] = "ask_availability"
+    else:
+        reply = "Do you have a cat? Please reply *yes* or *no*."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_ask_availability(msg, sender, name, user_state, phone_id, msg_type=None):
+    msg = msg.lower()
+    if msg == "no":
+        reply = "OK thanks. Whenever you have vacancies, don't hesitate to say 'Hi!'"
+        user_state["step"] = "end"
+    elif msg == "yes":
+        reply = "How many *boys* or *girls* do you need accommodation for in *single rooms*? (Enter number only)"
+        user_state["step"] = "ask_room_type"
+    else:
+        reply = "Do you have a vacancy? Please reply *yes* or *no*."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_ask_single_room_count(msg, sender, name, user_state, phone_id, msg_type=None):
+    if msg.isdigit():
+        user_state["room_single"] = int(msg)
+        reply = "Please confirm your rent for a single room (e.g. 130)."
+        user_state["step"] = "confirm_single"
+    else:
+        reply = "Please enter the number of students needing single rooms (number only)."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_confirm_single_rent(msg, sender, name, user_state, phone_id, msg_type=None):
+    try:
+        rent = float(msg)
+        user_state["rent_single"] = rent
+        reply = "How many students need 2-sharing rooms? (Enter number only)"
+        user_state["step"] = "ask_2_sharing"
+    except ValueError:
+        reply = "Please enter the rent as a number (e.g. 130)."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_ask_2_sharing_count(msg, sender, name, user_state, phone_id, msg_type=None):
+    if msg.isdigit():
+        user_state["room_2_sharing"] = int(msg)
+        reply = "Please confirm your rent for 2-sharing rooms (e.g. 80)."
+        user_state["step"] = "confirm_2_sharing"
+    else:
+        reply = "Please enter number of students needing 2-sharing rooms (number only)."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_confirm_2_sharing_rent(msg, sender, name, user_state, phone_id, msg_type=None):
+    try:
+        rent = float(msg)
+        user_state["rent_2_sharing"] = rent
+        reply = "How many students need 3-sharing rooms? (Enter number only)"
+        user_state["step"] = "ask_3_sharing"
+    except ValueError:
+        reply = "Please enter the rent as a number (e.g. 80)."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_ask_3_sharing_count(msg, sender, name, user_state, phone_id, msg_type=None):
+    if msg.isdigit():
+        user_state["room_3_sharing"] = int(msg)
+        reply = "Please confirm your rent for 3-sharing rooms (e.g. 60)."
+        user_state["step"] = "confirm_3_sharing"
+    else:
+        reply = "Please enter number of students needing 3-sharing rooms (number only)."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_confirm_3_sharing_rent(msg, sender, name, user_state, phone_id, msg_type=None):
+    try:
+        rent = float(msg)
+        user_state["rent_3_sharing"] = rent
+        reply = "What age group are the students? (e.g. 18-22)"
+        user_state["step"] = "ask_student_age"
+    except ValueError:
+        reply = "Please enter the rent as a number (e.g. 60)."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_ask_student_age(msg, sender, name, user_state, phone_id, msg_type=None):
+    user_state["student_age"] = msg
+    reply = "Thank you. Please confirm your listing by typing *confirm* or type *cancel* to abort."
+    user_state["step"] = "confirm_listing"
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_confirm_listing(msg, sender, name, user_state, phone_id, msg_type=None):
+    msg = msg.lower()
+    if msg == "confirm":
+        reply = "Thank you! Your listing will be published soon."
+        user_state["step"] = "end"
+    elif msg == "cancel":
+        reply = "Your listing was cancelled. Type 'Hi' to start over."
+        user_state["step"] = "end"
+    else:
+        reply = "Please type *confirm* to publish your listing or *cancel* to abort."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+
+def handle_student_pending(msg, sender, name, user_state, phone_id, msg_type=None):
+    reply = "Please download our app to secure your accommodation."
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_end(msg, sender, name, user_state, phone_id, msg_type=None):
+    msg = msg.lower()
+    if msg in ["hi", "hie", "hey"]:
+        reply = "Welcome back! Are you a *student* or a *landlord*?"
+        user_state["step"] = "start"
+    else:
+        reply = "Thank you for contacting us. Type 'Hi' to start again."
+
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
+
+def handle_default(msg, sender, name, user_state, phone_id, msg_type=None):
+    reply = "Sorry, I didn't understand that. Type 'Hi' to start over."
+    user_state["step"] = "start"
+    update_user_state(sender, user_state)
+    send(reply, sender, phone_id)
+    return jsonify({"status": "ok"})
 
 def handle_confirm_listing(selected_option, sender, name, user_state, phone_id, msg_type=None):
     if selected_option == "confirm":
