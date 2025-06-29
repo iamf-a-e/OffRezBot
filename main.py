@@ -363,6 +363,18 @@ def handle_ask_availability(selected_option, sender, name, user_state):
             "How many need single rooms? (Reply with number only)"
         )
 
+
+def handle_ask_2_sharing_count(selected_option, sender, name, user_state):
+    """Handle 2-sharing room count input"""
+    if selected_option.isdigit():
+        user_state["room_2_sharing"] = int(selected_option)
+        user_state["step"] = "confirm_2_sharing"
+        update_user_state(sender, user_state)
+        send_text_message(sender, "What's the rent for 2-sharing rooms? (Amount only)")
+    else:
+        send_text_message(sender, "Please enter a valid number for 2-sharing rooms.")
+
+
 def handle_confirm_2_sharing_rent(selected_option, sender, name, user_state):
     """Handle 2-sharing room rent input"""
     try:
