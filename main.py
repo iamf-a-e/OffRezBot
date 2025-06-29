@@ -324,6 +324,29 @@ def handle_ask_cat_owner(selected_option, sender, name, user_state):
         ["Yes", "No"]
     )
 
+
+def handle_ask_single_room_count(selected_option, sender, name, user_state):
+    """Handle single room count input"""
+    if selected_option.isdigit():
+        user_state["room_single"] = int(selected_option)
+        user_state["step"] = "confirm_single"
+        update_user_state(sender, user_state)
+        send_text_message(sender, "What's the rent for single rooms? (Amount only)")
+    else:
+        send_text_message(sender, "Please enter a valid number for single rooms.")
+
+def handle_confirm_single_rent(selected_option, sender, name, user_state):
+    """Handle single room rent input"""
+    try:
+        rent = float(selected_option)
+        user_state["rent_single"] = rent
+        user_state["step"] = "ask_2_sharing"
+        update_user_state(sender, user_state)
+        send_text_message(sender, "How many need 2-sharing rooms? (Number only)")
+    except ValueError:
+        send_text_message(sender, "Please enter a valid rent amount.")
+
+
 def handle_ask_availability(selected_option, sender, name, user_state):
     if selected_option == "no":
         user_state["step"] = "end"
