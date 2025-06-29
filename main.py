@@ -108,19 +108,21 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
                 else:
                     # If image received at unexpected step
-                    reply = "Please continue with text responses for your current request."
+                    reply = "We've already processed your verification. Please answer the current question."
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
-            # Handle text messages
+            # Handle text messages based on current step
             if msg_type == "text":
                 handler = action_mapping.get(current_step, handle_default)
                 return handler(msg, sender, name, user_state, phone_id)
-            else:
-                # For other message types (audio, video, etc.)
-                reply = "Please respond with text messages to continue."
+            elif current_step != "awaiting_image":
+                # Only allow non-text messages during verification
+                reply = "Please respond with text to continue."
                 send(reply, sender, phone_id)
                 return jsonify({"status": "ok"}), 200
+
+            return jsonify({"status": "ok"}), 200
 
         except Exception as e:
             logger.exception("Unhandled error in webhook")
