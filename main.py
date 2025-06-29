@@ -87,101 +87,100 @@ def webhook():
             msg_type = message.get("type")
             msg = message.get("text", {}).get("body", "").strip().lower() if msg_type == "text" else ""
 
-            # Initialize user state
-            user_state = get_user_state(sender) or {}
-            if "user" not in user_state:
-                user_state["user"] = {"name": name}
-            user_state["user_id"] = sender
+            # Initialize user state with proper defaults
+            user_state = get_user_state(sender) or {
+                "user": {"name": name},
+                "user_id": sender,
+                "step": "start",
+                "verified": False,
+                "image_received": False
+            }
             current_step = user_state.get("step", "start")
 
-            # Handle image messages - only during verification
+            # Debug logging
+            logger.info(f"Current state for {sender}: {json.dumps(user_state, indent=2)}")
+
+            # Handle image messages
             if msg_type == "image":
-                if current_step == "awaiting_image":
-                    if not user_state.get("image_received", False):
-                        # First time receiving image
-                        user_state["image_received"] = True
-                        user_state["step"] = "manual"
-                        update_user_state(sender, user_state)
-                        
-                        reply = (
-                            f"Thank you for the verification image, {name or 'there'}!\n\n"
-                            "Now please tell me about your accommodation:\n\n"
-                            "Is it for *boys*, *girls*, or *mixed*?"
-                        )
-                        send(reply, sender, phone_id)
-                        return jsonify({"status": "ok"}), 200
-                    else:
-                        # Already received image
-                        reply = "We've got your verification. Please answer the current question about your accommodation type."
-                        send(reply, sender, phone_id)
-                        return jsonify({"status": "ok"}), 200
+                if current_step == "awaiting_image" and not user_state.get("image_received", False):
+                    user_state["image_received"] = True
+                    user_state["verified"] = True
+                    user_state["step"] = "manual"
+                    update_user_state(sender, user_state)
+                    
+                    reply = (
+                        f"Thank you for the verification, {name or 'there'}!\n"
+                        "Now, is your accommodation for *boys*, *girls*, or *mixed*?"
+                    )
+                    send(reply, sender, phone_id)
+                    return jsonify({"status": "ok"}), 200
                 else:
-                    # Image received at wrong step
-                    current_question = get_current_question(current_step)
-                    reply = f"Please answer with text:\n\n{current_question}"
+                    reply = get_current_prompt(current_step)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
             # Handle text messages
             if msg_type == "text":
+                # Special case for 'hi' to allow restarting
+                if msg in ["hi", "hello", "hey"] and current_step != "start":
+                    user_state["step"] = "start"
+                    update_user_state(sender, user_state)
+                
                 handler = action_mapping.get(current_step, handle_default)
                 return handler(msg, sender, name, user_state, phone_id)
-            
-            # Handle all other message types (audio, video, documents)
-            if current_step == "awaiting_image":
-                reply = "Please send a screenshot of your WhatsApp profile for verification."
-            else:
-                current_question = get_current_question(current_step)
-                reply = f"Please answer with text:\n\n{current_question}"
-            
+
+            # Handle other message types
+            reply = get_current_prompt(current_step)
             send(reply, sender, phone_id)
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
-            logger.exception("Unhandled error in webhook")
+            logger.exception(f"Error processing message: {str(e)}")
             return jsonify({"status": "error", "message": str(e)}), 500
 
-def get_current_question(step):
-    """Returns the appropriate question for the current step"""
-    questions = {
+def get_current_prompt(step):
+    """Returns the appropriate prompt for the current step"""
+    prompts = {
         "start": "Are you a *student* or *landlord*?",
-        "awaiting_image": "Please send screenshot of your WhatsApp profile",
+        "awaiting_image": "Please send screenshot of your WhatsApp profile for verification",
         "manual": "Is your accommodation for *boys*, *girls*, or *mixed*?",
-        "ask_cat_owner": "Do you have a cat? (yes/no)",
-        "ask_availability": "Do you have vacancies? (yes/no)",
-        "ask_room_type": "How many need single rooms? (number)",
-        "confirm_single": "What's the rent for single rooms? (amount)",
-        "ask_2_sharing": "How many need 2-sharing rooms? (number)",
-        "confirm_2_sharing": "What's the rent for 2-sharing? (amount)",
-        "ask_3_sharing": "How many need 3-sharing rooms? (number)",
-        "confirm_3_sharing": "What's the rent for 3-sharing? (amount)",
-        "ask_student_age": "What age group? (e.g., 18-22)",
+        "ask_cat_owner": "Do you have a cat? (reply *yes* or *no*)",
+        "ask_availability": "Do you have vacancies? (reply *yes* or *no*)",
+        "ask_room_type": "How many need single rooms? (number only)",
+        "confirm_single": "What's the rent for single rooms? (amount only)",
+        "ask_2_sharing": "How many need 2-sharing rooms? (number only)",
+        "confirm_2_sharing": "What's the rent for 2-sharing rooms? (amount only)",
+        "ask_3_sharing": "How many need 3-sharing rooms? (number only)",
+        "confirm_3_sharing": "What's the rent for 3-sharing rooms? (amount only)",
+        "ask_student_age": "What age group? (e.g. 18-22)",
         "confirm_listing": "Type *confirm* to publish or *cancel* to abort",
         "student_pending": "Please download our app from [link]",
         "end": "Type 'Hi' to start again"
     }
-    return questions.get(step, "Please respond with text to continue.")
-    
+    return prompts.get(step, "Please respond with text to continue.")
 
-def handle_start(msg, sender, name, user_state, phone_id, msg_type=None):
+def handle_start(msg, sender, name, user_state, phone_id):
     msg = msg.lower()
-
-    if msg in ["hi", "hie", "hey"]:
-        reply = "Hello! Are you a *student* or a *landlord*? Please reply with one."
+    
+    if msg in ["hi", "hello", "hey"]:
+        reply = "Hello! Are you a *student* or *landlord*?"
+        user_state["step"] = "start"
     elif msg == "landlord":
-        reply = "Great! Please send a screenshot of your WhatsApp username with your contact name for verification."
-        user_state["step"] = "awaiting_image"
-        update_user_state(sender, user_state)
+        reply = "Great! Please send a screenshot of your WhatsApp profile for verification."
+        user_state.update({
+            "step": "awaiting_image",
+            "verified": False,
+            "image_received": False
+        })
     elif msg == "student":
-        reply = "Welcome, student! Please download our app to secure your accommodation."
+        reply = "Welcome student! Please download our app to find accommodation."
         user_state["step"] = "student_pending"
-        update_user_state(sender, user_state)
     else:
-        reply = "Please reply with *student* or *landlord* to continue."
-
+        reply = "Please specify if you're a *student* or *landlord*."
+    
+    update_user_state(sender, user_state)
     send(reply, sender, phone_id)
     return jsonify({"status": "ok"})
-
 
 def handle_manual_house_type(msg, sender, name, user_state, phone_id, msg_type=None):
     msg = msg.lower()
