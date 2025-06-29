@@ -363,7 +363,85 @@ def handle_ask_availability(selected_option, sender, name, user_state):
             "How many need single rooms? (Reply with number only)"
         )
 
-# ... [other handlers follow the same pattern] ...
+def handle_confirm_2_sharing_rent(selected_option, sender, name, user_state):
+    """Handle 2-sharing room rent input"""
+    try:
+        rent = float(selected_option)
+        user_state["rent_2_sharing"] = rent
+        user_state["step"] = "ask_3_sharing"
+        update_user_state(sender, user_state)
+        send_text_message(sender, "How many need 3-sharing rooms? (Number only)")
+    except ValueError:
+        send_text_message(sender, "Please enter a valid rent amount.")
+
+def handle_ask_3_sharing_count(selected_option, sender, name, user_state):
+    """Handle 3-sharing room count input"""
+    if selected_option.isdigit():
+        user_state["room_3_sharing"] = int(selected_option)
+        user_state["step"] = "confirm_3_sharing"
+        update_user_state(sender, user_state)
+        send_text_message(sender, "What's the rent for 3-sharing rooms? (Amount only)")
+    else:
+        send_text_message(sender, "Please enter a valid number for 3-sharing rooms.")
+
+def handle_confirm_3_sharing_rent(selected_option, sender, name, user_state):
+    """Handle 3-sharing room rent input"""
+    try:
+        rent = float(selected_option)
+        user_state["rent_3_sharing"] = rent
+        user_state["step"] = "ask_student_age"
+        update_user_state(sender, user_state)
+        send_text_message(sender, "What age group are the students? (e.g. 18-22)")
+    except ValueError:
+        send_text_message(sender, "Please enter a valid rent amount.")
+
+def handle_ask_student_age(selected_option, sender, name, user_state):
+    """Handle student age group input"""
+    user_state["student_age"] = selected_option
+    user_state["step"] = "confirm_listing"
+    update_user_state(sender, user_state)
+    send_button_message(
+        sender,
+        "Please confirm your listing details",
+        ["Confirm", "Cancel"]
+    )
+
+def handle_confirm_listing(selected_option, sender, name, user_state):
+    """Handle listing confirmation"""
+    if selected_option.lower() == "confirm":
+        # Process the listing confirmation
+        user_state["step"] = "end"
+        update_user_state(sender, user_state)
+        send_text_message(
+            sender,
+            "Thank you! Your listing has been submitted for approval."
+        )
+        # Optionally notify admin
+        if OWNER_PHONE:
+            send_text_message(
+                OWNER_PHONE,
+                f"New listing from {name} ({sender}):\n"
+                f"House Type: {user_state.get('house_type')}\n"
+                f"Single Rooms: {user_state.get('room_single')} @ {user_state.get('rent_single')}\n"
+                f"2-Sharing: {user_state.get('room_2_sharing')} @ {user_state.get('rent_2_sharing')}\n"
+                f"3-Sharing: {user_state.get('room_3_sharing')} @ {user_state.get('rent_3_sharing')}\n"
+                f"Age Group: {user_state.get('student_age')}"
+            )
+    else:
+        user_state["step"] = "end"
+        update_user_state(sender, user_state)
+        send_text_message(
+            sender,
+            "Listing cancelled. Type 'Hi' to start again."
+        )
+
+def handle_student_pending(selected_option, sender, name, user_state):
+    """Handle student pending state"""
+    send_text_message(
+        sender,
+        "Please download our app from [app link] to find accommodation."
+    )
+
 
 def handle_default(selected_option, sender, name, user_state):
     send_text_message(sender, "Sorry, I didn't understand that. Type 'Hi' to start over.")
