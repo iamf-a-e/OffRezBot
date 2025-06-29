@@ -97,31 +97,38 @@ def webhook():
             # Handle image messages
             if msg_type == "image":
                 if current_step == "awaiting_image":
-                    reply = (
-                        f"Thanks {name or 'there'} for the image.\n\n"
-                        "Now let's collect house details.\n\n"
-                        "Do you have accommodation for *boys*, *girls*, or *mixed*?"
-                    )
-                    user_state["step"] = "manual"
+                    # Check if we've already processed verification for this user
+                    if user_state.get("verified"):
+                        reply = "You're already verified. Let's continue with your listing."
+                        user_state["step"] = "manual"
+                    else:
+                        reply = (
+                            f"Thanks {name or 'there'} for the image.\n\n"
+                            "Now let's collect house details.\n\n"
+                            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                        )
+                        user_state["verified"] = True
+                        user_state["step"] = "manual"
+                    
                     update_user_state(sender, user_state)
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
                 else:
                     # If image received at unexpected step
-                    reply = "We've already processed your verification. Please answer the current question."
+                    reply = "Please answer the current question with text."
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
-            # Handle text messages based on current step
+            # Handle text messages
             if msg_type == "text":
                 handler = action_mapping.get(current_step, handle_default)
                 return handler(msg, sender, name, user_state, phone_id)
-            elif current_step != "awaiting_image":
-                # Only allow non-text messages during verification
+            
+            # Handle other message types
+            if current_step != "awaiting_image":
                 reply = "Please respond with text to continue."
                 send(reply, sender, phone_id)
-                return jsonify({"status": "ok"}), 200
-
+            
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
