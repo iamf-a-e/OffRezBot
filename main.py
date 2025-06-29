@@ -94,28 +94,31 @@ def webhook():
             user_state["user_id"] = sender
             current_step = user_state.get("step", "start")
 
-            # Handle image messages
+            # Handle image messages - only during verification
             if msg_type == "image":
                 if current_step == "awaiting_image":
-                    # Check if we've already processed verification for this user
-                    if user_state.get("verified"):
-                        reply = "You're already verified. Let's continue with your listing."
+                    if not user_state.get("image_received", False):
+                        # First time receiving image
+                        user_state["image_received"] = True
                         user_state["step"] = "manual"
-                    else:
+                        update_user_state(sender, user_state)
+                        
                         reply = (
-                            f"Thanks {name or 'there'} for the image.\n\n"
-                            "Now let's collect house details.\n\n"
-                            "Do you have accommodation for *boys*, *girls*, or *mixed*?"
+                            f"Thank you for the verification image, {name or 'there'}!\n\n"
+                            "Now please tell me about your accommodation:\n\n"
+                            "Is it for *boys*, *girls*, or *mixed*?"
                         )
-                        user_state["verified"] = True
-                        user_state["step"] = "manual"
-                    
-                    update_user_state(sender, user_state)
-                    send(reply, sender, phone_id)
-                    return jsonify({"status": "ok"}), 200
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
+                    else:
+                        # Already received image
+                        reply = "We've got your verification. Please answer the current question about your accommodation type."
+                        send(reply, sender, phone_id)
+                        return jsonify({"status": "ok"}), 200
                 else:
-                    # If image received at unexpected step
-                    reply = "Please answer the current question with text."
+                    # Image received at wrong step
+                    current_question = get_current_question(current_step)
+                    reply = f"Please answer with text:\n\n{current_question}"
                     send(reply, sender, phone_id)
                     return jsonify({"status": "ok"}), 200
 
@@ -124,17 +127,41 @@ def webhook():
                 handler = action_mapping.get(current_step, handle_default)
                 return handler(msg, sender, name, user_state, phone_id)
             
-            # Handle other message types
-            if current_step != "awaiting_image":
-                reply = "Please respond with text to continue."
-                send(reply, sender, phone_id)
+            # Handle all other message types (audio, video, documents)
+            if current_step == "awaiting_image":
+                reply = "Please send a screenshot of your WhatsApp profile for verification."
+            else:
+                current_question = get_current_question(current_step)
+                reply = f"Please answer with text:\n\n{current_question}"
             
+            send(reply, sender, phone_id)
             return jsonify({"status": "ok"}), 200
 
         except Exception as e:
             logger.exception("Unhandled error in webhook")
             return jsonify({"status": "error", "message": str(e)}), 500
-            
+
+def get_current_question(step):
+    """Returns the appropriate question for the current step"""
+    questions = {
+        "start": "Are you a *student* or *landlord*?",
+        "awaiting_image": "Please send screenshot of your WhatsApp profile",
+        "manual": "Is your accommodation for *boys*, *girls*, or *mixed*?",
+        "ask_cat_owner": "Do you have a cat? (yes/no)",
+        "ask_availability": "Do you have vacancies? (yes/no)",
+        "ask_room_type": "How many need single rooms? (number)",
+        "confirm_single": "What's the rent for single rooms? (amount)",
+        "ask_2_sharing": "How many need 2-sharing rooms? (number)",
+        "confirm_2_sharing": "What's the rent for 2-sharing? (amount)",
+        "ask_3_sharing": "How many need 3-sharing rooms? (number)",
+        "confirm_3_sharing": "What's the rent for 3-sharing? (amount)",
+        "ask_student_age": "What age group? (e.g., 18-22)",
+        "confirm_listing": "Type *confirm* to publish or *cancel* to abort",
+        "student_pending": "Please download our app from [link]",
+        "end": "Type 'Hi' to start again"
+    }
+    return questions.get(step, "Please respond with text to continue.")
+    
 
 def handle_start(msg, sender, name, user_state, phone_id, msg_type=None):
     msg = msg.lower()
