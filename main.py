@@ -454,6 +454,22 @@ def handle_student_pending(selected_option, sender, name, user_state):
         "Please download our app from [app link] to find accommodation."
     )
 
+def handle_end(selected_option, sender, name, user_state):
+    """Handle conversation end state"""
+    if selected_option.lower() in ["hi", "hello", "hey"]:
+        user_state["step"] = "start"
+        update_user_state(sender, user_state)
+        send_list_message(
+            sender,
+            "Welcome back! Are you a student or landlord?",
+            ["Student", "Landlord"],
+            "User Type"
+        )
+    else:
+        send_text_message(
+            sender,
+            "Thank you for using our service. Type 'Hi' to start again."
+        )
 
 def handle_default(selected_option, sender, name, user_state):
     send_text_message(sender, "Sorry, I didn't understand that. Type 'Hi' to start over.")
